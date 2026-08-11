@@ -33,6 +33,18 @@ Team: Corey, Jenn W, Allyson, Nic, Olga, Joe, Angel. Fill in the owner column
 above once assignments are settled — each person should work primarily on
 their own branch and open a PR into `main` when ready.
 
+## New to GitHub or coding? Start here
+
+If you've never used GitHub or written code before, don't read the rest of
+this file first — go straight to one of these instead:
+
+- [TEAM_SETUP_CLAUDE.md](TEAM_SETUP_CLAUDE.md) — for teams using Claude
+- [TEAM_SETUP_CHATGPT.md](TEAM_SETUP_CHATGPT.md) — for the team using ChatGPT
+
+Both walk through everything with GitHub Desktop (no Terminal commands
+beyond one copy-paste step), including how to get your agent's code
+written for you by an AI chatbot instead of coding it yourself.
+
 ## How the pieces fit together
 
 ```
@@ -123,8 +135,13 @@ actual-results payload and returns:
 
 ## Agents
 
-Every agent is a Claude API call with a distinct system prompt that locks it
-into its one perspective. Suggested framing for each:
+Every agent is an LLM API call with a distinct system prompt that locks it
+into its one perspective. Most branches use Claude; one team is using
+ChatGPT instead — that's fine, the API/provider doesn't matter as long as
+every agent's input and output match the data contract above. See
+[TEAM_SETUP_CLAUDE.md](TEAM_SETUP_CLAUDE.md) or
+[TEAM_SETUP_CHATGPT.md](TEAM_SETUP_CHATGPT.md) depending on which one your
+team is using. Suggested framing for each agent:
 
 - **Creative** — story quality, director/cast pedigree, originality vs.
   franchise fatigue, artistic risk
@@ -144,12 +161,17 @@ gets the pre-release payload above.
 
 ## Environment variables
 
-Whoever builds `data-pipeline` should add a `.env.example` documenting the
-required keys, at minimum:
+`data-pipeline` is already built (see `data-pipeline/README.md`) and only
+needs:
 
-- `ANTHROPIC_API_KEY` — powers all five agents
 - `TMDB_API_KEY` — film metadata
 - `OMDB_API_KEY` — IMDb rating / box office data (OMDb wraps IMDB data; there's
   no free official IMDB API)
 
-Never commit real API keys — use `.env.local` (gitignored) for actual values.
+Each agent branch needs its own key for whichever LLM it calls:
+
+- `ANTHROPIC_API_KEY` — for branches using Claude
+- `OPENAI_API_KEY` — for branches using ChatGPT
+
+Never commit real API keys — every branch keeps its keys in its own
+`.env.local` (gitignored), never in a file that gets pushed to GitHub.
