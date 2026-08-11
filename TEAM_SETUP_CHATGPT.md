@@ -1,23 +1,13 @@
-# Team Setup Guide — ChatGPT / OpenAI Team (No Coding Required)
+# Team Setup Guide — ChatGPT / OpenAI Team
 
 This is for the team using ChatGPT instead of Claude. (If your team is
 using Claude, use [TEAM_SETUP_CLAUDE.md](TEAM_SETUP_CLAUDE.md) instead.)
 
-This guide is written for people who have never used GitHub or written
-code before. If you get stuck on any step, ask Corey.
+This guide covers getting GitHub set up and getting your OpenAI API key
+connected. If you get stuck on any step, ask Corey.
 
-See the main [README.md](README.md) first for the overall project concept
-and the data contract every agent has to follow.
-
-## Best setup for your team
-
-Your team works only inside your own folder, named after your branch
-(e.g. `creative/`, `finance/`, `marketing/`, `distribution/`, or
-`scoring/` — whichever one is yours) — same pattern as the existing
-`data-pipeline/` folder. Since you don't need to write code, **you'll ask
-ChatGPT to write the code for you**, using a prompt template below — then
-just run it. Nobody edits real code by hand except to paste in a couple of
-things.
+See the main [README.md](README.md) for the overall project concept and
+the data contract every agent has to follow.
 
 ---
 
@@ -71,106 +61,19 @@ This file is set up to be ignored by GitHub on purpose — your key should
 never get pushed or shared. If you ever see `.env.local` show up as a
 change in GitHub Desktop, do not include it in a commit.
 
-## Part 5 — Get your agent written (no coding — ChatGPT writes it)
+## Part 5 — Save and share your work
 
-1. Fill out your agent's "personality worksheet" first:
-   - What does your character care about? (e.g. Finance cares about budget
-     vs. plausible return, not whether the story is good)
-   - What's their tone/personality? (skeptical? bullish? risk-averse?)
-   - What are they NOT allowed to know? (only pre-release info — title,
-     genre, director, cast, budget, release date, similar films. Never
-     reviews, ratings, or box office — that's cheating.)
-   - What does a "yes" (greenlight) look like for them vs. a "no" (pass)?
-     Give 1-2 concrete example reasons for each.
+Once you have files to add (from building your agent), do this all inside
+GitHub Desktop, no Terminal needed:
 
-   (If your team is the `scoring` team, your worksheet is different — see
-   the note at the bottom of this doc.)
-
-2. Open https://chatgpt.com in a browser
-3. Paste this prompt, filling in the `[bracketed]` parts with your
-   worksheet answers:
-
-   ```
-   Write a single Python file called agent.py that does the following:
-
-   1. Reads an API key from a file called .env.local in the same folder
-      (format: OPENAI_API_KEY=xxxx, one line, no quotes)
-   2. Reads a movie's pre-release info from a JSON file passed as a
-      command-line argument, e.g.: python3 agent.py movie.json
-      The JSON has this shape:
-      {
-        "title": "string", "releaseDate": "string", "genres": ["string"],
-        "director": "string", "cast": ["string"], "studio": "string",
-        "budget": number or null, "logline": "string",
-        "franchise": "string or null", "comparableFilms": ["string"]
-      }
-   3. Sends that info to OpenAI's GPT-4o model using the openai Python
-      package, with this system prompt, so the agent argues from one
-      specific point of view:
-
-      "[paste your worksheet content here — what this character cares
-      about, their tone, and 2-3 example reasons for greenlight vs pass]"
-
-   4. Prints the result as JSON in exactly this shape:
-      {"role": "[creative/finance/marketing/distribution]",
-       "argument": "one paragraph of reasoning",
-       "vote": "greenlight" or "pass"}
-
-   Keep it simple, no error handling beyond the basics.
-   ```
-
-4. ChatGPT will output a code file. Copy the whole thing.
-5. Back in Finder, in your team folder, create a new text file named
-   `agent.py`, paste the code in, and save it.
-
-## Part 6 — Test it
-
-This is the one step that needs Terminal — but it's just copy-paste, no
-editing:
-
-1. Get one of the sample movie JSON files from the `shared-data/` folder in
-   the repo (ask Corey if it's not there yet)
-2. Open Terminal (Cmd+Space, type "Terminal", press Enter), then paste:
-   ```bash
-   cd ~/path/to/aigreenlightcommittee/yourfoldername
-   pip3 install openai
-   python3 agent.py barbie.json
-   ```
-3. If it prints back JSON with an argument and a vote, it worked.
-
-## Part 7 — Save and share your work
-
-All inside GitHub Desktop, no Terminal needed:
-
-1. Your new files (`agent.py`) will show up automatically in the left
-   sidebar under "Changes" — **but not `.env.local`**, since that has your
-   secret key. If `.env.local` shows up in that list, leave its checkbox
-   unchecked.
-2. In the bottom left, type a short summary like "Add agent", then click
-   **Commit to [your branch name]**
+1. Your new files will show up automatically in the left sidebar under
+   "Changes" — **but not `.env.local`**, since that has your secret key.
+   If `.env.local` shows up in that list, leave its checkbox unchecked.
+2. In the bottom left, type a short summary of what you changed, then
+   click **Commit to [your branch name]**
 3. Click **Push origin** (top right)
 4. Go to github.com, you'll see a banner "Compare & pull request" — click
    it, then **Create pull request**
 
 Someone else on the team should review your pull request before it gets
 merged into `main`.
-
----
-
-## Note if your team is `scoring`
-
-Your worksheet is different, since your agent doesn't have an opinion of
-its own — it grades the other four:
-
-- What counts as the committee "getting it right"? (e.g. they greenlit it
-  and it made money / passed and it flopped = good call; greenlit a flop =
-  bad call)
-- Should reasoning matter, or just the vote outcome? (e.g. right vote for
-  the wrong reason — does that count?)
-- What does the output look like — a letter grade? a number? a paragraph
-  of verdict?
-
-Your agent takes the other four agents' arguments and votes, plus the
-**actual-results payload** (box office, IMDb rating, audience/critic
-score — see the data contract in the main README), and produces a grade
-plus a rationale.

@@ -41,9 +41,9 @@ this file first — go straight to one of these instead:
 - [TEAM_SETUP_CLAUDE.md](TEAM_SETUP_CLAUDE.md) — for teams using Claude
 - [TEAM_SETUP_CHATGPT.md](TEAM_SETUP_CHATGPT.md) — for the team using ChatGPT
 
-Both walk through everything with GitHub Desktop (no Terminal commands
-beyond one copy-paste step), including how to get your agent's code
-written for you by an AI chatbot instead of coding it yourself.
+Both walk through installing GitHub Desktop, cloning the repo, switching to
+your branch, getting your API key, and pushing your work — no Terminal
+required.
 
 ## How the pieces fit together
 
