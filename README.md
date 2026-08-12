@@ -22,16 +22,15 @@ free official IMDB API — OMDb is the usual proxy for IMDB ratings).
 
 | Branch | Owner | Role |
 |---|---|---|
-| `data-pipeline` | TBD | Pulls and cleans film data from TMDB/IMDB |
-| `creative` | TBD | Creative agent |
-| `finance` | TBD | Finance agent |
-| `marketing` | TBD | Marketing agent |
-| `distribution` | TBD | Distribution agent |
-| `scoring` | TBD | Reveal + scoring agent |
+| `data-pipeline` | Corey | Pulls and cleans film data from TMDB/IMDB |
+| `creative` | Allyson | Creative agent |
+| `finance` | Olga | Finance agent |
+| `marketing` | Joe | Marketing agent |
+| `distribution` | Nic, Jenn | Distribution agent |
+| `scoring` | Angel | Reveal + scoring agent |
 
-Team: Corey, Jenn W, Allyson, Nic, Olga, Joe, Angel. Fill in the owner column
-above once assignments are settled — each person should work primarily on
-their own branch and open a PR into `main` when ready.
+Each person should work primarily on their own branch and open a PR into
+`main` when ready.
 
 ## New to GitHub or coding? Start here
 
