@@ -1,11 +1,38 @@
 """Shapes match the data contract in the root README.md.
 
 Keep these two payloads strictly separate: PreReleaseFilm may only contain
-information that would have been known before the film opened. ActualResults
-holds everything that only exists after release, and is only ever handed to
+information that would have been known before the film opened, and must
+never include the evaluated film's own post-release reception. Other films
+referenced within PreReleaseFilm (comparable titles, franchise entries, past
+filmography) are already-released movies, so their own historical reception
+data is fair game and included directly. ActualResults holds everything that
+only exists after the evaluated film's release, and is only ever handed to
 the scoring agent.
 """
 from typing import List, Optional, TypedDict
+
+
+class ComparableFilm(TypedDict):
+    title: str
+    releaseDate: Optional[str]
+    rating: Optional[float]
+
+
+class FranchiseEntry(TypedDict):
+    title: str
+    releaseDate: Optional[str]
+    rating: Optional[float]
+
+
+class PastFilm(TypedDict):
+    title: str
+    releaseDate: Optional[str]
+    rating: Optional[float]
+
+
+class CastMemberFilmography(TypedDict):
+    name: str
+    pastFilms: List[PastFilm]
 
 
 class PreReleaseFilm(TypedDict):
@@ -18,7 +45,10 @@ class PreReleaseFilm(TypedDict):
     budget: Optional[int]
     logline: Optional[str]
     franchise: Optional[str]
-    comparableFilms: List[str]
+    franchiseEntries: List[FranchiseEntry]
+    comparableFilms: List[ComparableFilm]
+    directorFilmography: List[PastFilm]
+    castFilmography: List[CastMemberFilmography]
 
 
 class ActualResults(TypedDict):

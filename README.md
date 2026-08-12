@@ -76,7 +76,10 @@ So the branches can be built independently and still plug together cleanly,
 every agent should be written against these two shapes:
 
 **Pre-release film payload** (only this is visible to the four committee
-agents — no ratings, no box office, nothing that only exists after release):
+agents — no ratings, no box office, nothing that only exists after release,
+for *the film being evaluated*. Other, already-released films referenced
+here — comparable titles, franchise entries, filmography — are historical
+public data, so their own rating/release info is included directly):
 
 ```json
 {
@@ -89,9 +92,33 @@ agents — no ratings, no box office, nothing that only exists after release):
   "budget": "number | null",
   "logline": "string",
   "franchise": "string | null",
-  "comparableFilms": ["string"]
+  "franchiseEntries": [
+    { "title": "string", "releaseDate": "YYYY-MM-DD | null", "rating": "number | null" }
+  ],
+  "comparableFilms": [
+    { "title": "string", "releaseDate": "YYYY-MM-DD | null", "rating": "number | null" }
+  ],
+  "directorFilmography": [
+    { "title": "string", "releaseDate": "YYYY-MM-DD | null", "rating": "number | null" }
+  ],
+  "castFilmography": [
+    {
+      "name": "string",
+      "pastFilms": [
+        { "title": "string", "releaseDate": "YYYY-MM-DD | null", "rating": "number | null" }
+      ]
+    }
+  ]
 }
 ```
+
+`rating` is TMDB's public rating normalized to a 0–100 scale (same scale as
+`audienceScore` below). `franchiseEntries` is the full list of other entries
+in the film's collection (for franchise-fatigue analysis); `directorFilmography`
+is the director's last 5 films; `castFilmography` covers the top 4 billed
+cast members, each with their last 5 films. All four lists exclude the film
+currently being evaluated — that's still only revealed via the actual-results
+payload below, after the vote.
 
 **Actual-results payload** (only revealed by the `scoring` agent, after the
 vote):

@@ -31,6 +31,12 @@ python3 cli.py "Dune: Part Two"
 Prints JSON with `preRelease` and `actualResults` payloads for the best TMDB
 match on that title.
 
+Note: `fetch_film` now makes several extra TMDB requests per lookup (one for
+the collection/franchise, one for the director's filmography, one per top-4
+cast member) on top of the base movie + OMDb calls — so a single film lookup
+is up to ~8 API calls, not 2. Fine for TMDB's free tier at this project's
+scale, but worth knowing if you're scripting bulk lookups.
+
 ## Tests
 
 Offline, no API keys or network needed — they run against fixture data:
@@ -42,7 +48,9 @@ python3 -m unittest discover -s tests
 ## Layout
 
 - `src/tmdb_client.py` — search + fetch a movie's full TMDB record (details,
-  credits, external IDs, similar titles) in one call
+  credits, external IDs, similar titles) in one call, plus separate lookups
+  for a franchise/collection's entries and a person's filmography
+  (`get_collection`, `get_person_movie_credits`)
 - `src/omdb_client.py` — fetch OMDb's IMDB-sourced rating/box office data by
   IMDB id
 - `src/pipeline.py` — shapes raw TMDB/OMDb responses into the two contract
@@ -54,11 +62,20 @@ python3 -m unittest discover -s tests
 
 ## The one rule that matters here
 
-`build_pre_release_payload` must never include anything that only exists
-after a film comes out (ratings, box office, revenue, vote counts). That's
+`build_pre_release_payload` must never include the *evaluated film's own*
+post-release reception (its ratings, box office, revenue, vote count). That's
 the whole premise of the app — if this leaks, the committee agents are
 cheating. `test_never_leaks_actual_results_fields` in
 `tests/test_pipeline.py` guards this; keep it passing.
+
+This does **not** apply to other, already-released films referenced inside
+the payload — `comparableFilms`, `franchiseEntries`, `directorFilmography`,
+and `castFilmography` all include those films' own ratings and release
+dates, since that's historical public data, not something that "only exists
+after [the evaluated film] comes out." The helper `_other_films` in
+`src/pipeline.py` is what excludes the evaluated film (by TMDB id) from all
+four of those lists — don't build a new one of these lists without routing
+it through that same exclusion.
 
 ## Using this from the rest of the app
 

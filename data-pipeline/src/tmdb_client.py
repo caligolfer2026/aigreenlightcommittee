@@ -40,3 +40,13 @@ def get_movie_full(tmdb_id: int, api_key: str) -> dict:
         api_key,
         append_to_response="credits,external_ids,similar",
     )
+
+
+def get_collection(collection_id: int, api_key: str) -> dict:
+    """Fetch a franchise/collection's full list of entries (parts)."""
+    return _get(f"/collection/{collection_id}", api_key)
+
+
+def get_person_movie_credits(person_id: int, api_key: str) -> dict:
+    """Fetch a person's film credits (cast + crew), for filmography lookups."""
+    return _get(f"/person/{person_id}/movie_credits", api_key)
