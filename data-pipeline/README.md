@@ -31,6 +31,22 @@ python3 cli.py "Dune: Part Two"
 Prints JSON with `preRelease` and `actualResults` payloads for the best TMDB
 match on that title.
 
+### Loading a slate into the central databases
+
+`cli.py` is just for trying out a single lookup. To actually populate the
+two central Postgres databases that the agent branches read from, use
+`load_slate.py` instead:
+
+```bash
+pip install -r ../db/requirements.txt
+python3 load_slate.py --slate 2026-spring "Dune: Part Two" "Wicked"
+```
+
+This needs `PRERELEASE_DATABASE_URL` and `RESULTS_DATABASE_URL` in
+`.env.local` (in addition to the TMDB/OMDb keys) — see `.env.example` and
+[`../db/README.md`](../db/README.md). It's the one script in this repo that
+touches both databases; everywhere else keeps them separate on purpose.
+
 Note: `fetch_film` now makes several extra TMDB requests per lookup (one for
 the collection/franchise, one for the director's filmography, one per top-4
 cast member) on top of the base movie + OMDb calls — so a single film lookup

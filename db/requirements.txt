@@ -1,0 +1,3 @@
+# Only needed by code that talks to the central databases (db/, and
+# data-pipeline/load_slate.py). Nothing else in this repo needs this.
+psycopg[binary]>=3.1

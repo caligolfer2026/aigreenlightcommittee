@@ -47,25 +47,33 @@ required.
 ## How the pieces fit together
 
 ```
-            ┌────────────────┐
-            │  data-pipeline │  fetches TMDB/IMDB data, splits it into:
-            └───────┬────────┘   - PRE-release payload (for the debate)
-                    │            - ACTUAL-results payload (for scoring)
-                    ▼
-   ┌───────────┬───────────┬───────────┬──────────────┐
-   │ creative  │  finance  │ marketing │ distribution │   each agent reads the
-   └─────┬─────┴─────┬─────┴─────┬─────┴──────┬───────┘   PRE-release payload
-         └───────────┴───────────┴────────────┘            only, and outputs:
-                          │                                 { argument, vote }
-                          ▼
-                   committee transcript + votes
-                          │
-                          ▼
-                 ┌─────────────────┐
-                 │     scoring      │  reveals the ACTUAL-results payload,
-                 └─────────────────┘  compares it to the committee's votes,
-                                       and produces a grade + rationale
+                        ┌────────────────┐
+                        │  data-pipeline  │  fetches TMDB/IMDB data, loads it
+                        └────────┬────────┘  into two central Postgres DBs
+                                 │
+                   ┌─────────────┴─────────────┐
+                   ▼                            ▼
+        ┌─────────────────────┐      ┌───────────────────────┐
+        │   pre-release db     │      │      results db        │
+        │  films + votes        │      │  box office / audience  │
+        └──────────┬─────────────┘     └───────────┬─────────────┘
+                   │                                │
+                   ▼                                │
+   ┌───────────┬───────────┬───────────┬──────────────┐          │
+   │ creative  │  finance  │ marketing │ distribution │  vote      │
+   └───────────┴───────────┴───────────┴──────────────┘  here      │
+                                 │                                 │
+                                 ▼                                 ▼
+                          ┌────────────┐
+                          │   scoring   │  reads the votes, then reveals the
+                          └────────────┘  results db and grades the committee
 ```
+
+Two separate central Postgres databases, not one — see
+[`db/README.md`](db/README.md) for why. `creative`/`finance`/`marketing`/
+`distribution` only ever get a connection string to the pre-release
+database; only `scoring` (and the data-pipeline loader) can reach the
+results database at all.
 
 `main` is the integration branch. Nobody pushes directly to `main` — every
 branch merges in via a reviewed pull request.
@@ -199,5 +207,14 @@ Each agent branch needs its own key for whichever LLM it calls:
 - `ANTHROPIC_API_KEY` — for branches using Claude
 - `OPENAI_API_KEY` — for branches using ChatGPT
 
-Never commit real API keys — every branch keeps its keys in its own
-`.env.local` (gitignored), never in a file that gets pushed to GitHub.
+Every branch also needs a database connection string, from the shared `db`
+package (see [`db/README.md`](db/README.md) for full setup):
+
+- `PRERELEASE_DATABASE_URL` — needed by `creative`, `finance`, `marketing`,
+  `distribution`, `scoring`, and `data-pipeline`
+- `RESULTS_DATABASE_URL` — needed **only** by `scoring` and `data-pipeline`;
+  don't put this in any other branch's `.env.local`
+
+Never commit real API keys or database URLs — every branch keeps its
+secrets in its own `.env.local` (gitignored), never in a file that gets
+pushed to GitHub.
