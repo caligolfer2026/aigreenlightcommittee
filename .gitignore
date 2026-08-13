@@ -1,0 +1,16 @@
+# Environment files and secrets
+# Agent definitions in .claude/agents/*.md are intentionally tracked and shared.
+
+.env
+.env.*
+*.env
+!.env.example
+
+# Credential / key material
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.json
+secrets.json
+service-account*.json
