@@ -49,6 +49,7 @@ body {
   inset: 0;
   z-index: 100;
   background: #000;
+  overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -59,7 +60,62 @@ body {
   pointer-events: none;
 }
 
+.intro-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+.intro-spotlight {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    ellipse 55% 45% at 50% 40%,
+    rgba(232, 195, 74, 0.16) 0%,
+    rgba(232, 195, 74, 0.05) 40%,
+    rgba(0, 0, 0, 0) 70%
+  );
+  animation: intro-spotlight-pulse 6s ease-in-out infinite;
+}
+
+@keyframes intro-spotlight-pulse {
+  0%, 100% { opacity: 0.7; }
+  50% { opacity: 1; }
+}
+
+.intro-curtain {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 22%;
+  background: linear-gradient(
+    to right,
+    rgba(60, 20, 20, 0.9),
+    rgba(30, 10, 10, 0.5) 60%,
+    rgba(0, 0, 0, 0) 100%
+  );
+}
+.intro-curtain::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: repeating-linear-gradient(
+    100deg,
+    rgba(0, 0, 0, 0.35) 0px,
+    rgba(0, 0, 0, 0.35) 14px,
+    rgba(0, 0, 0, 0) 14px,
+    rgba(0, 0, 0, 0) 34px
+  );
+}
+.intro-curtain-left { left: 0; }
+.intro-curtain-right {
+  right: 0;
+  transform: scaleX(-1);
+}
+
 .intro-lines {
+  position: relative;
+  z-index: 1;
   max-width: 640px;
   padding: 0 1.5rem;
   text-align: center;
