@@ -111,9 +111,11 @@ def agent_run(session_id: int, film_id: int, role: str, slate: str = "default"):
 
 
 @app.post("/api/session/{session_id}/score-run")
-def score_run(session_id: int, tmdb_id: int):
+def score_run(session_id: int, tmdb_id: int, slate: str = "default"):
     """Actually run the scoring agent (real Claude call, or a free mock
-    response) for one film and record its grade."""
+    response) for one film and record its grade. The grade itself is always
+    computed deterministically (see committee/calibration.py) -- only the
+    rationale text depends on ANTHROPIC_API_KEY."""
     votes = [v for v in get_votes(session_id) if v["tmdb_id"] == tmdb_id]
     if not votes:
         raise HTTPException(status_code=400, detail="No votes recorded for this film yet")
@@ -122,7 +124,14 @@ def score_run(session_id: int, tmdb_id: int):
     if actual is None:
         raise HTTPException(status_code=404, detail="No actual results loaded for this film yet")
 
-    result = run_scoring(votes, actual["payload"])
+    title = votes[0]["title"]
+    budget = None
+    for film in get_slate(slate=slate):
+        if film["tmdb_id"] == tmdb_id:
+            budget = (film["payload"] or {}).get("budget")
+            break
+
+    result = run_scoring(title, votes, actual["payload"], budget)
     record_score(
         session_id=session_id,
         tmdb_id=tmdb_id,

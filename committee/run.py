@@ -52,7 +52,8 @@ def main() -> None:
             print(f"--- {film['title']}: no actual results loaded yet, skipping scoring ---\n")
             continue
 
-        score = run_scoring(film_votes, actual["payload"])
+        budget = (film["payload"] or {}).get("budget")
+        score = run_scoring(film["title"], film_votes, actual["payload"], budget)
         record_score(
             session_id=session_id,
             tmdb_id=film["tmdb_id"],

@@ -222,9 +222,10 @@ async function runVerdict() {
     verdictCardsEl.appendChild(card);
 
     try {
-      const resp = await fetch(`/api/session/${state.sessionId}/score-run?tmdb_id=${film.tmdb_id}`, {
-        method: "POST",
-      });
+      const resp = await fetch(
+        `/api/session/${state.sessionId}/score-run?tmdb_id=${film.tmdb_id}&slate=${encodeURIComponent(state.slateName)}`,
+        { method: "POST" }
+      );
       if (!resp.ok) throw new Error(await resp.text());
       const score = await resp.json();
 
