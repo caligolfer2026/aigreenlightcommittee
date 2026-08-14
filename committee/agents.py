@@ -10,10 +10,6 @@ import json
 from .llm import call_structured, has_api_key
 
 ROLE_FRAMING = {
-    "marketing": (
-        "audience appeal, positioning, trailer-ability, and cultural "
-        "moment/timing"
-    ),
     "distribution": (
         "release window competition, platform strategy (theatrical vs. "
         "streaming), and international rollout potential"
@@ -119,6 +115,50 @@ You will receive a pre-release film payload: budget, genre, cast, franchise stat
 Respond with your argument (2-4 sentences, citing at least one specific figure from the payload) and your vote."""
 
 
+# Ported from the `marketing` branch's marketing/prompt.py. That branch was
+# built for OpenAI (marketing/openai_client.py, gpt-5.4-mini) -- this port
+# keeps the persona/evaluation-framework content but runs it through this
+# pipeline's Claude-only call_structured instead, to keep one LLM provider
+# across the whole app. The original's separate `awarenessTier` schema field
+# is folded into the `argument` text as a marker line instead, matching how
+# the marketing branch's own code already falls back to embedding it in text
+# when the model omits it from structured output.
+MARKETING_SYSTEM_PROMPT = """You are the Chief Marketing Officer of a major studio and a voting member of the studio greenlight committee. You are commercially creative, decisive, audience-first, and willing to advocate for Marketing's position.
+
+Your central question is: Can this movie be clearly positioned, effectively marketed, and made compelling enough to its target audience to justify a greenlight from the marketing perspective?
+
+Evaluate the project using five lenses:
+1. Audience clarity (25%): primary and secondary audiences, their reasons to care, and likely breadth from niche to four-quadrant.
+2. Consumer proposition (25%): the differentiated one-sentence promise and the answer to "This is the movie where..."
+3. Campaign and trailer potential (20%): supported imagery, talent, spectacle, humor, emotion, suspense, action, music, characters, or memorable hooks.
+4. Studio strategic fit (15%): coherent audience expectations, tone, portfolio distinctiveness, and brand trust.
+5. Cultural timing and differentiation (15%): release date, genre crowding, relevance, franchise familiarity or fatigue, and comparable-film evidence from the payload.
+
+Three gates matter regardless of the weighted assessment:
+- Who is the primary audience?
+- What is the clearest consumer promise?
+- Why would that audience want to see this film now?
+If at least two cannot be answered with evidence, normally PASS.
+
+Predict an Awareness Tier of Low, Medium, or High. This is the level of audience awareness and attention the film is likely to generate relative to its apparent budget and scale, not a prediction of quality, profitability, or final reception.
+
+ROLE BOUNDARIES:
+- Do not replace Creative's judgment of artistic quality.
+- Do not perform Finance's ROI or profitability analysis.
+- Do not prescribe Distribution's release-channel strategy.
+- Discuss budget, story, or release only through audience demand and marketability.
+
+INFORMATION FIREWALL:
+- Use only facts in the supplied pre-release film payload.
+- Never use remembered outcomes for the evaluated film, even if you recognize it.
+- Do not mention its actual box office, reviews, ratings, awards, audience reaction, later cultural impact, or subsequent franchise performance.
+- Historical ratings supplied for other films (comparableFilms, franchiseEntries, castFilmography, directorFilmography) are approved context, not automatic proof that this project will succeed.
+- Do not invent missing facts. Distinguish supported evidence, reasonable marketing inference, and unknown information.
+- Make the decision as if the evaluated film has not yet been released.
+
+Write one concise C-suite argument that identifies the target audience, positioning, strongest campaign assets, largest marketing risks, material uncertainty, awareness tier, and rationale for the vote. Be persuasive, but never let confidence, famous talent, franchise status, or the majority substitute for evidence. End your `argument` with a line in this exact format: [Predicted Awareness Tier: Low|Medium|High]."""
+
+
 VOTE_SCHEMA = {
     "type": "object",
     "properties": {
@@ -139,6 +179,8 @@ def _mock_vote(role: str, film_payload: dict) -> dict:
         return _mock_finance_vote(film_payload)
     if role == "creative":
         return _mock_creative_vote(film_payload)
+    if role == "marketing":
+        return _mock_marketing_vote(film_payload)
 
     title = film_payload.get("title", "this film")
     seed = int(hashlib.sha256(f"{role}:{title}".encode()).hexdigest(), 16)
@@ -202,6 +244,36 @@ def _mock_creative_vote(film_payload: dict) -> dict:
     return {"role": "creative", "vote": vote, "argument": argument}
 
 
+_MARKETING_MOCK_AWARENESS_TIERS = ["Low", "Medium", "High"]
+
+_MARKETING_MOCK_TEMPLATES = [
+    "{title} has a clear four-quadrant read: the genre and cast give us a "
+    "recognizable promise -- 'this is the movie where...' -- and that's "
+    "the whole campaign in one trailer beat.",
+    "The audience for {title} is real but narrower than the budget wants "
+    "it to be; the consumer promise is fuzzy enough that the campaign "
+    "would be selling a vibe instead of a reason to show up opening weekend.",
+    "{title} is well-timed against the current release slate, and the "
+    "comparable titles in this genre have been performing -- that's a "
+    "trailer-ready hook, not just a scheduling footnote.",
+]
+
+
+def _mock_marketing_vote(film_payload: dict) -> dict:
+    title = film_payload.get("title", "this film")
+    seed = int(hashlib.sha256(f"marketing:{title}".encode()).hexdigest(), 16)
+    vote = "greenlight" if seed % 2 == 0 else "pass"
+    template = _MARKETING_MOCK_TEMPLATES[seed % len(_MARKETING_MOCK_TEMPLATES)]
+    tier = _MARKETING_MOCK_AWARENESS_TIERS[seed % len(_MARKETING_MOCK_AWARENESS_TIERS)]
+    argument = (
+        f"{template.format(title=title)} "
+        f"[Predicted Awareness Tier: {tier}]\n\n"
+        "[MOCK -- no ANTHROPIC_API_KEY set. Set one in .env.local for "
+        "real Claude-generated arguments.]"
+    )
+    return {"role": "marketing", "vote": vote, "argument": argument}
+
+
 # Ported from finance/PERSONA.md's "missing-budget exception": if the
 # payload has no budget, skip the persona and the Claude call entirely --
 # there's nothing for her to reason about -- and always vote pass.
@@ -252,6 +324,8 @@ def _system_prompt_for(role: str) -> str:
         return CREATIVE_SYSTEM_PROMPT
     if role == "finance":
         return FINANCE_SYSTEM_PROMPT
+    if role == "marketing":
+        return MARKETING_SYSTEM_PROMPT
     framing = ROLE_FRAMING[role]
     return (
         f"You are the {role.upper()} member of a studio greenlight committee. "
