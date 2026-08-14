@@ -295,5 +295,29 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
+// ---------- Intro ----------
+const INTRO_TOTAL_MS = 9600; // last line's delay + its own hold/fade duration
+const introOverlay = document.getElementById("intro-overlay");
+const introSkipBtn = document.getElementById("intro-skip-btn");
+
+function dismissIntro() {
+  if (!introOverlay) return;
+  introOverlay.classList.add("intro-hidden");
+  setTimeout(() => introOverlay.remove(), 1200);
+}
+
+if (introOverlay) {
+  if (sessionStorage.getItem("introShown")) {
+    introOverlay.remove();
+  } else {
+    sessionStorage.setItem("introShown", "1");
+    const introTimer = setTimeout(dismissIntro, INTRO_TOTAL_MS);
+    introSkipBtn.addEventListener("click", () => {
+      clearTimeout(introTimer);
+      dismissIntro();
+    });
+  }
+}
+
 // ---------- Init ----------
 renderSlate();
