@@ -1,0 +1,22 @@
+# Render Blueprint -- lets Render auto-configure the web service from this
+# file (Render dashboard -> New -> Blueprint -> pick this repo). Env vars
+# with `sync: false` are secrets you paste in manually in the Render
+# dashboard after the first deploy; they are never read from this file.
+services:
+  - type: web
+    name: ai-greenlight-committee
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn api.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PRERELEASE_DATABASE_URL
+        sync: false
+      - key: RESULTS_DATABASE_URL
+        sync: false
+      - key: TMDB_API_KEY
+        sync: false
+      - key: OMDB_API_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false

@@ -1,0 +1,8 @@
+# Combined dependencies for deploying the whole app (api/ + committee/ + db/)
+# as one process. See api/requirements.txt, committee/requirements.txt, and
+# db/requirements.txt for what each piece needs on its own -- this just
+# unions them for a single deploy target (e.g. Render).
+fastapi>=0.115
+uvicorn>=0.32
+anthropic>=0.122.0
+psycopg[binary]>=3.1
