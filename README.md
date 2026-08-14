@@ -12,76 +12,133 @@ date, etc.). The committee debates and votes to greenlight or pass on each
 film.
 
 A fifth agent, **Scoring**, then reveals what actually happened — real box
-office numbers and audience/critic response — and grades the committee on how
-well their pre-release judgment matched reality.
+office numbers and audience/critic response, pulled live from TMDB/OMDb —
+and grades the committee on how well their pre-release judgment matched
+reality.
 
-Data comes from TMDB and IMDB (via a data-pipeline module, since there's no
-free official IMDB API — OMDb is the usual proxy for IMDB ratings).
+## Status
 
-## Team & Branches
+A working end-to-end app is built and running on `main` — you can add a
+film by title (live TMDB/OMDb lookup), convene the committee, watch all
+four agents vote, and see the scoring agent's grade. No `ANTHROPIC_API_KEY`
+is required to try it: every agent falls back to a free, deterministic mock
+response when no key is set, so the whole pipeline (database writes,
+scoring math, the UI) can be exercised at zero cost. Add a real key to get
+actual Claude-generated arguments.
 
-| Branch | Owner | Role |
+Persona status per role — most were built by teammates on their own
+branches and ported into the running app (`committee/agents.py`):
+
+| Role | Persona | Ported from |
 |---|---|---|
-| `data-pipeline` | Corey | Pulls and cleans film data from TMDB/IMDB |
-| `creative` | Allyson | Creative agent |
-| `finance` | Olga | Finance agent |
-| `marketing` | Joe | Marketing agent |
-| `distribution` | Nic, Jenn | Distribution agent |
-| `scoring` | Angel | Reveal + scoring agent |
+| Creative | ✅ | `creative` branch (`.claude/agents/creative.md`) |
+| Finance | ✅ | `finance` branch (`finance/PERSONA.md`) |
+| Marketing | ✅ | `marketing` branch (`marketing/prompt.py` — originally built for OpenAI, ported to run on Claude instead so the app stays on one LLM provider) |
+| Distribution | ⬜ generic | no branch work yet |
+| Scoring | ✅ grade is deterministic | `scoring` branch (`scoring/calibration.py`) — the LLM only writes the rationale, never the grade |
 
-Each person should work primarily on their own branch and open a PR into
-`main` when ready.
+## Project layout
 
-## New to GitHub or coding? Start here
-
-If you've never used GitHub or written code before, don't read the rest of
-this file first — go straight to one of these instead:
-
-- [TEAM_SETUP_CLAUDE.md](TEAM_SETUP_CLAUDE.md) — for teams using Claude
-- [TEAM_SETUP_CHATGPT.md](TEAM_SETUP_CHATGPT.md) — for the team using ChatGPT
-
-Both walk through installing GitHub Desktop, cloning the repo, switching to
-your branch, getting your API key, and pushing your work — no Terminal
-required.
+```
+data-pipeline/   TMDB/OMDb fetch + pre-release/actual-results payload builder
+db/              Shared Postgres layer -- two databases, deliberately separate
+committee/       The five agents (creative/finance/marketing/distribution
+                 vote; scoring grades) + the Claude call wrapper + mock mode
+api/             FastAPI backend -- sessions, votes, scores, add-film-by-title
+frontend/        The UI (landing/slate builder -> deliberation -> verdict)
+```
 
 ## How the pieces fit together
 
 ```
                         ┌────────────────┐
-                        │  data-pipeline  │  fetches TMDB/IMDB data, loads it
+                        │  data-pipeline  │  fetches TMDB/OMDb data, loads it
                         └────────┬────────┘  into two central Postgres DBs
                                  │
                    ┌─────────────┴─────────────┐
                    ▼                            ▼
-        ┌─────────────────────┐      ┌───────────────────────┐
-        │   pre-release db     │      │      results db        │
-        │  films + votes        │      │  box office / audience  │
-        └──────────┬─────────────┘     └───────────┬─────────────┘
+        ┌──────────────────────┐      ┌──────────────────────┐
+        │   pre-release db     │      │      results db      │
+        │  films + votes       │      │  box office/audience │
+        └──────────┬────────────┘      └───────────┬───────────┘
                    │                                │
                    ▼                                │
-   ┌───────────┬───────────┬───────────┬──────────────┐          │
-   │ creative  │  finance  │ marketing │ distribution │  vote      │
-   └───────────┴───────────┴───────────┴──────────────┘  here      │
-                                 │                                 │
-                                 ▼                                 ▼
-                          ┌────────────┐
-                          │   scoring   │  reads the votes, then reveals the
-                          └────────────┘  results db and grades the committee
+        ┌──────────────────────────────────────┐    │
+        │      committee/agents.py              │    │
+        │  creative · finance · marketing ·     │    │
+        │  distribution vote (Claude, or mock)  │    │
+        └──────────────────┬─────────────────────┘   │
+                            │                         │
+                            ▼                         ▼
+                     ┌────────────────────────────────┐
+                     │       committee/scoring.py       │
+                     │  grade computed deterministically │
+                     │  from real TMDB/OMDb numbers;     │
+                     │  Claude (or mock) writes only the │
+                     │  rationale text                   │
+                     └────────────────┬───────────────┘
+                                      │
+                                      ▼
+                      ┌───────────────────────────────┐
+                      │   api/main.py (FastAPI)         │
+                      │  sessions, agent-run, score-run,│
+                      │  add-film (live TMDB/OMDb)      │
+                      └────────────────┬────────────────┘
+                                       │
+                                       ▼
+                              ┌─────────────────┐
+                              │    frontend/      │
+                              │  landing → deliberation → verdict │
+                              └─────────────────┘
 ```
 
 Two separate central Postgres databases, not one — see
-[`db/README.md`](db/README.md) for why. `creative`/`finance`/`marketing`/
-`distribution` only ever get a connection string to the pre-release
-database; only `scoring` (and the data-pipeline loader) can reach the
-results database at all.
+[`db/README.md`](db/README.md) for why. `committee/agents.py`'s four voting
+agents only ever read from the pre-release database; only
+`committee/scoring.py` (and the data-pipeline loader) can reach the results
+database at all.
 
 `main` is the integration branch. Nobody pushes directly to `main` — every
 branch merges in via a reviewed pull request.
 
-## Data contract (agree on this before writing agent code)
+## Running it locally
 
-So the branches can be built independently and still plug together cleanly,
-every agent should be written against these two shapes:
+```bash
+# from the repo root
+pip install -r api/requirements.txt -r committee/requirements.txt -r db/requirements.txt
+python3 -m uvicorn api.main:app --reload
+```
+
+Open `http://localhost:8000`. Add a film by title (or load an existing
+slate), click **Convene the Committee**, and watch it run. Works with no
+`ANTHROPIC_API_KEY` set — see [Environment variables](#environment-variables).
+
+To run the same flow from the command line instead of the browser:
+
+```bash
+python3 -m committee.run --slate default
+```
+
+## Environment variables
+
+All of the following live in a single `.env.local` file at the **repo
+root** (gitignored — never commit real keys or database URLs):
+
+- `TMDB_API_KEY` / `OMDB_API_KEY` — film metadata and box office/rating data.
+  Required for loading films (via the UI's "add film" or
+  `data-pipeline/load_slate.py`).
+- `PRERELEASE_DATABASE_URL` / `RESULTS_DATABASE_URL` — the two central
+  Postgres databases (see [`db/README.md`](db/README.md) for setup).
+- `ANTHROPIC_API_KEY` — optional. Without it, every agent (and scoring's
+  rationale text) runs in mock mode instead of calling Claude — the app
+  still works end-to-end, just with placeholder argument text instead of
+  real LLM output. The scoring **grade** is always real regardless, since
+  it's computed deterministically from TMDB/OMDb data, not by the LLM.
+
+## Data contract
+
+So the pieces plug together cleanly, every agent is written against these
+two shapes:
 
 **Pre-release film payload** (only this is visible to the four committee
 agents — no ratings, no box office, nothing that only exists after release,
@@ -142,79 +199,64 @@ vote):
 ```
 
 **Each committee agent** (`creative`, `finance`, `marketing`, `distribution`)
-should expose one function that takes the pre-release payload (and optionally
-the other agents' arguments, if you want cross-talk) and returns:
+returns:
 
 ```json
 { "role": "creative", "argument": "string", "vote": "greenlight | pass" }
 ```
 
-**The scoring agent** takes the committee's transcript + votes plus the
-actual-results payload and returns:
+**The scoring agent** takes the committee's votes plus the actual-results
+payload and returns:
 
 ```json
 { "grade": "string | number", "rationale": "string" }
 ```
 
-## Getting started on your branch
+## Agent personas
 
-1. `git checkout <your-branch>` (e.g. `git checkout creative`)
-2. `git pull origin <your-branch>` to make sure you're up to date
-3. `git pull origin main` (or rebase) periodically so you're not building on
-   stale code
-4. Build your piece against the data contract above so it can be swapped into
-   the full app without changes to anyone else's code
-5. Commit and push to your branch, then open a PR into `main` for review —
-   don't merge your own PR without at least one reviewer
-
-## Agents
-
-Every agent is an LLM API call with a distinct system prompt that locks it
-into its one perspective. Most branches use Claude; one team is using
-ChatGPT instead — that's fine, the API/provider doesn't matter as long as
-every agent's input and output match the data contract above. See
-[TEAM_SETUP_CLAUDE.md](TEAM_SETUP_CLAUDE.md) or
-[TEAM_SETUP_CHATGPT.md](TEAM_SETUP_CHATGPT.md) depending on which one your
-team is using. Suggested framing for each agent:
+Suggested framing for each role (see `committee/agents.py` for the actual
+ported system prompts):
 
 - **Creative** — story quality, director/cast pedigree, originality vs.
   franchise fatigue, artistic risk
 - **Finance** — budget vs. plausible return, comparable films' performance,
   break-even math, financial risk
-- **Marketing** — audience appeal, positioning, trailer-ability, cultural
-  moment/timing
+- **Marketing** — audience clarity, consumer proposition, campaign/trailer
+  potential, strategic fit, cultural timing
 - **Distribution** — release window competition, platform strategy (theatrical
-  vs. streaming), international rollout potential
+  vs. streaming), international rollout potential — *not yet built*
 - **Scoring** — no opinion of its own; its job is to reveal the actual
   results and objectively grade how well the committee's reasoning and vote
-  held up against reality
+  held up against reality. The grade is computed deterministically (see
+  `committee/calibration.py`); only the rationale text comes from an LLM.
 
-Each committee agent's system prompt should explicitly forbid it from using
-any post-release information (reviews, box office, audience scores) — it only
+Every committee agent's system prompt explicitly forbids using any
+post-release information (reviews, box office, audience scores) — it only
 gets the pre-release payload above.
 
-## Environment variables
+## Team & Branches
 
-`data-pipeline` is already built (see `data-pipeline/README.md`) and only
-needs:
+| Branch | Owner | Role | Status |
+|---|---|---|---|
+| `data-pipeline` | Corey | Pulls and cleans film data from TMDB/OMDb | ✅ merged |
+| `creative` | Allyson | Creative agent persona | ✅ ported to `main` |
+| `finance` | Olga | Finance agent persona | ✅ ported to `main` |
+| `marketing` | Joe | Marketing agent persona | ✅ ported to `main` |
+| `distribution` | Nic, Jenn | Distribution agent | ⬜ not started |
+| `scoring` | Angel | Reveal + scoring agent | ✅ ported to `main` |
 
-- `TMDB_API_KEY` — film metadata
-- `OMDB_API_KEY` — IMDb rating / box office data (OMDb wraps IMDB data; there's
-  no free official IMDB API)
+Branch work still gets merged in via PR — if you push updates to your
+branch, they'll get folded into `committee/agents.py` on `main` the same
+way the creative/finance/marketing/scoring branches were.
 
-Each agent branch needs its own key for whichever LLM it calls:
+## New to GitHub or coding? Start here
 
-- `ANTHROPIC_API_KEY` — for branches using Claude
-- `OPENAI_API_KEY` — for branches using ChatGPT
+If you've never used GitHub or written code before, don't read the rest of
+this file first — go straight to one of these instead:
 
-Every branch also needs a database connection string, from the shared `db`
-package (see [`db/README.md`](db/README.md) for full setup):
+- [TEAM_SETUP_CLAUDE.md](TEAM_SETUP_CLAUDE.md) — for teams using Claude
+- [TEAM_SETUP_CHATGPT.md](TEAM_SETUP_CHATGPT.md) — for the team using ChatGPT
 
-- `PRERELEASE_DATABASE_URL` — needed by `creative`, `finance`, `marketing`,
-  `distribution`, `scoring`, and `data-pipeline`
-- `RESULTS_DATABASE_URL` — needed **only** by `scoring` and `data-pipeline`;
-  don't put this in any other branch's `.env.local`
-
-Never commit real API keys or database URLs — every branch keeps its
-secrets in its own `.env.local` (gitignored), never in a file that gets
-pushed to GitHub.
+Both walk through installing GitHub Desktop, cloning the repo, switching to
+your branch, getting your API key, and pushing your work — no Terminal
+required.
