@@ -73,8 +73,13 @@ def run_scoring(
                 "computed": computed,
             }
         )
-        result = call_structured(SYSTEM_PROMPT, user_content, RATIONALE_SCHEMA)
-        rationale = result["rationale"]
+        try:
+            result = call_structured(SYSTEM_PROMPT, user_content, RATIONALE_SCHEMA)
+            rationale = result["rationale"]
+        except Exception:
+            # A present-but-unusable key (no credit balance, rate limited,
+            # network hiccup) shouldn't 500 the whole request.
+            rationale = _fallback_rationale(title, computed)
 
     return {"grade": computed["grade"], "rationale": rationale}
 
@@ -128,7 +133,12 @@ def run_pitch_scoring(title: str, votes: list[dict]) -> dict:
                 "grade": grade,
             }
         )
-        result = call_structured(PITCH_SYSTEM_PROMPT, user_content, RATIONALE_SCHEMA)
-        rationale = result["rationale"]
+        try:
+            result = call_structured(PITCH_SYSTEM_PROMPT, user_content, RATIONALE_SCHEMA)
+            rationale = result["rationale"]
+        except Exception:
+            # A present-but-unusable key (no credit balance, rate limited,
+            # network hiccup) shouldn't 500 the whole request.
+            rationale = _pitch_fallback_rationale(title, decision, grade)
 
     return {"grade": grade, "outcome": decision["outcome"], "rationale": rationale}

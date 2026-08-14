@@ -446,7 +446,13 @@ def run_agent(role: str, film_payload: dict) -> dict:
 
     system_prompt = _system_prompt_for(role)
     user_content = json.dumps(film_payload, indent=2)
-    result = call_structured(system_prompt, user_content, VOTE_SCHEMA)
+    try:
+        result = call_structured(system_prompt, user_content, VOTE_SCHEMA)
+    except Exception:
+        # A present-but-unusable key (no credit balance, rate limited,
+        # network hiccup) shouldn't 500 the whole request -- fall back to
+        # the same mock response used when no key is set at all.
+        return _mock_vote(role, film_payload)
     result["role"] = role
     result["confidence"] = max(0, min(100, int(result.get("confidence", 50))))
     return result

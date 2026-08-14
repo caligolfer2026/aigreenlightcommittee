@@ -170,5 +170,10 @@ def parse_pitch(pitch_text: str) -> dict:
     if not has_api_key():
         return _mock_parse(pitch_text)
 
-    result = call_structured(PITCH_SYSTEM_PROMPT, pitch_text, PITCH_SCHEMA)
-    return result
+    try:
+        return call_structured(PITCH_SYSTEM_PROMPT, pitch_text, PITCH_SCHEMA)
+    except Exception:
+        # A present-but-unusable key (no credit balance, rate limited,
+        # network hiccup) shouldn't 500 the whole request -- fall back to
+        # the same heuristic parse used when no key is set at all.
+        return _mock_parse(pitch_text)
