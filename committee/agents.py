@@ -211,6 +211,11 @@ _CONFIDENCE_INSTRUCTION = (
     "payload should read as high confidence (80+). Don't default to a "
     "round number like 50/70/90 out of habit -- vary it based on how much "
     "the payload actually supports your call."
+    "\n\nKeep `argument` to 200 words or fewer -- this is a hard ceiling, "
+    "not a target, so err short rather than risk running over. Write it as "
+    "plain prose, in your voice, starting directly with your reasoning -- "
+    "never open with a label, header, or role name (e.g. do not begin with "
+    "\"Position:\", \"Argument:\", \"Marketing's take:\", or similar)."
 )
 
 
@@ -447,7 +452,11 @@ def run_agent(role: str, film_payload: dict) -> dict:
     system_prompt = _system_prompt_for(role)
     user_content = json.dumps(film_payload, indent=2)
     try:
-        result = call_structured(system_prompt, user_content, VOTE_SCHEMA)
+        # 200-word cap on `argument` (see _CONFIDENCE_INSTRUCTION) -- 1200
+        # tokens leaves headroom so a verbose persona doesn't get its JSON
+        # truncated mid-string, while still being well under the default
+        # 4096 budget, which measurably speeds up the shorter agent replies.
+        result = call_structured(system_prompt, user_content, VOTE_SCHEMA, max_tokens=1200)
     except Exception:
         # A present-but-unusable key (no credit balance, rate limited,
         # network hiccup) shouldn't 500 the whole request -- fall back to

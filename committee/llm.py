@@ -38,13 +38,15 @@ def get_client() -> anthropic.Anthropic:
     return _client
 
 
-def call_structured(system_prompt: str, user_content: str, schema: dict) -> dict:
+def call_structured(system_prompt: str, user_content: str, schema: dict, max_tokens: int = 4096) -> dict:
     """Call Claude with a system prompt + user content, forcing the response
-    to validate against `schema` via structured outputs."""
+    to validate against `schema` via structured outputs. `max_tokens` should
+    be kept low for the four voting agents (short arguments, faster
+    responses) and left at the default for scoring's longer rationale."""
     client = get_client()
     response = client.messages.create(
         model=MODEL,
-        max_tokens=4096,
+        max_tokens=max_tokens,
         system=system_prompt,
         output_config={"format": {"type": "json_schema", "schema": schema}},
         messages=[{"role": "user", "content": user_content}],
