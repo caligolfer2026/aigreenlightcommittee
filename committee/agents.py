@@ -211,7 +211,7 @@ _CONFIDENCE_INSTRUCTION = (
     "payload should read as high confidence (80+). Don't default to a "
     "round number like 50/70/90 out of habit -- vary it based on how much "
     "the payload actually supports your call."
-    "\n\nKeep `argument` to 200 words or fewer -- this is a hard ceiling, "
+    "\n\nKeep `argument` to 150 words or fewer -- this is a hard ceiling, "
     "not a target, so err short rather than risk running over. Write it as "
     "plain prose, in your voice, starting directly with your reasoning -- "
     "never open with a label, header, or role name (e.g. do not begin with "
