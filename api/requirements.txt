@@ -1,2 +1,4 @@
 fastapi>=0.115
 uvicorn>=0.32
+anthropic>=0.122.0
+psycopg[binary]>=3.1
