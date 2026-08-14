@@ -43,15 +43,28 @@ VOTE_SCHEMA = {
             "type": "string",
             "description": (
                 "The full evaluation, in the CCO's voice, covering all four "
-                "criteria and ending with the [Predicted Reception Score: "
-                "XX/100] line."
+                "criteria, including the short explanation of what is driving "
+                "the score."
             ),
         },
         "vote": {"type": "string", "enum": ["greenlight", "pass"]},
+        "predicted_score": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100,
+            "description": (
+                "Predicted critical reception on a 0-100 scale -- the "
+                "calibrated best guess, not the contrarian one."
+            ),
+        },
     },
-    "required": ["role", "argument", "vote"],
+    "required": ["role", "argument", "vote", "predicted_score"],
     "additionalProperties": False,
 }
+
+# What gets written into the argument text. Kept in one place so the scoring
+# branch has a single, stable pattern to parse: [Predicted Reception Score: NN/100]
+SCORE_LINE = "[Predicted Reception Score: {score}/100]"
 
 # Appended to the persona. This is the part that must hold even if the persona
 # file is rewritten, so it says "overrides anything above" and repeats the
@@ -87,10 +100,16 @@ way the persona above tells you to: stay in voice, lean on what you do have,
 and move on. Never invent a rating, an award, or a review you were not given.
 
 **Return your evaluation as JSON** matching the schema you were given:
-`role` is always "creative"; `argument` is the full evaluation in your voice,
-covering all four criteria and ending with the
-`[Predicted Reception Score: XX/100]` line; `vote` is exactly "greenlight" or
-"pass" -- there is no conditional verdict.
+
+- `role` is always "creative".
+- `argument` is the full evaluation in your voice, covering all four criteria,
+  and including the brief note on what is pulling your score up or down.
+- `vote` is exactly "greenlight" or "pass" -- there is no conditional verdict.
+- `predicted_score` is the number itself, 0-100, as an integer.
+
+Put the score in `predicted_score`, not in the prose -- the canonical
+`[Predicted Reception Score: NN/100]` line is written into the argument for
+you from that field, so you don't need to format it yourself.
 """
 
 
@@ -108,6 +127,32 @@ def load_system_prompt(path: Path = PERSONA_PATH) -> str:
         if sep:
             text = body
     return text.strip() + "\n" + FRAMING
+
+
+def apply_canonical_score(argument: str, score: int) -> str:
+    """Put exactly one canonical score line into the argument text.
+
+    The persona is still free to talk about the score, and models are
+    inconsistent about how they format it (bold, different brackets, out of
+    range, or missing entirely). So rather than trusting the prose, this
+    rewrites any line mentioning the score with one built from the validated
+    integer, and appends it if the model never wrote one. Later duplicates are
+    dropped, leaving a single line for the scoring branch to parse.
+    """
+    canonical = SCORE_LINE.format(score=score)
+    kept, replaced = [], False
+    for line in argument.splitlines():
+        if "predicted reception score" in line.lower():
+            if not replaced:
+                kept.append(canonical)
+                replaced = True
+            continue
+        kept.append(line)
+
+    text = "\n".join(kept).rstrip()
+    if not replaced:
+        text += "\n\n" + canonical
+    return text
 
 
 def build_user_message(film: dict) -> str:
@@ -150,7 +195,11 @@ def evaluate_film(
         )
 
     text = next(b.text for b in message.content if b.type == "text")
-    return json.loads(text)
+    verdict = json.loads(text)
+    verdict["argument"] = apply_canonical_score(
+        verdict["argument"], verdict["predicted_score"]
+    )
+    return verdict
 
 
 def run(
@@ -180,7 +229,7 @@ def run(
             print(f"  FAILED: {exc}\n", file=sys.stderr)
             continue
 
-        print(f"  vote: {verdict['vote']}")
+        print(f"  vote: {verdict['vote']}   score: {verdict['predicted_score']}/100")
         print(f"\n{verdict['argument']}\n")
 
         if dry_run:
