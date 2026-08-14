@@ -3,7 +3,7 @@ of the app relies on: PreReleaseFilm (what the committee agents see) and
 ActualResults (what only the scoring agent sees).
 """
 import re
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from . import omdb_client, tmdb_client
 from .schema import (
@@ -14,6 +14,10 @@ from .schema import (
     PastFilm,
     PreReleaseFilm,
 )
+
+# Cap on extra /movie/{id} detail calls made to backfill budget/revenue for
+# comparable and franchise films, and on genre-historical-performance comps.
+FINANCIALS_LIMIT = 5
 
 MONEY_RE = re.compile(r"[\d,]+")
 
@@ -92,13 +96,29 @@ def build_pre_release_payload(
     collection_data: Optional[dict] = None,
     director_credits: Optional[dict] = None,
     cast_credits: Optional[List[Tuple[str, dict]]] = None,
+    comparable_financials: Optional[Dict[int, dict]] = None,
+    franchise_financials: Optional[Dict[int, dict]] = None,
+    genre_historical: Optional[List[dict]] = None,
 ) -> PreReleaseFilm:
     """Build the pre-release payload from a movie's TMDB details, plus
     optional extra lookups (collection, director/cast credits) used to fill
     in franchiseEntries / directorFilmography / castFilmography. All three
     are optional so callers that only have the base movie record still get a
     valid payload (with those lists empty).
+
+    `comparable_financials` / `franchise_financials` are optional
+    {tmdb_id: {"budget": int|None, "revenue": int|None}} maps -- backfilling
+    these requires an extra /movie/{id} call per film (the lightweight
+    "similar"/"collection" list entries don't carry budget/revenue), so
+    that I/O happens in fetch_film and the results are passed in here,
+    keeping this function itself pure/offline. `genre_historical` is a
+    pre-built list of already-released same-genre films (also fetched by
+    fetch_film via TMDB's Discover endpoint, independent of the "similar"
+    algorithm) -- also pure pass-through here.
     """
+    comparable_financials = comparable_financials or {}
+    franchise_financials = franchise_financials or {}
+
     credits = tmdb_details.get("credits", {})
     movie_id = tmdb_details.get("id")
     director_entry = next(
@@ -115,6 +135,8 @@ def build_pre_release_payload(
             title=m.get("title") or m.get("original_title"),
             releaseDate=m.get("release_date") or None,
             rating=_normalize_rating(m.get("vote_average")),
+            budget=comparable_financials.get(m.get("id"), {}).get("budget"),
+            boxOfficeWorldwide=comparable_financials.get(m.get("id"), {}).get("revenue"),
         )
         for m in _other_films(similar, movie_id, limit=5)
     ]
@@ -127,9 +149,22 @@ def build_pre_release_payload(
                 title=p.get("title") or p.get("original_title"),
                 releaseDate=p.get("release_date") or None,
                 rating=_normalize_rating(p.get("vote_average")),
+                budget=franchise_financials.get(p.get("id"), {}).get("budget"),
+                boxOfficeWorldwide=franchise_financials.get(p.get("id"), {}).get("revenue"),
             )
             for p in parts
         ]
+
+    genre_historical_performance = [
+        ComparableFilm(
+            title=g.get("title") or g.get("original_title"),
+            releaseDate=g.get("release_date") or None,
+            rating=_normalize_rating(g.get("vote_average")),
+            budget=g.get("budget"),
+            boxOfficeWorldwide=g.get("revenue"),
+        )
+        for g in (genre_historical or [])
+    ]
 
     director_filmography: List[PastFilm] = []
     if director_credits:
@@ -163,6 +198,7 @@ def build_pre_release_payload(
         comparableFilms=comparable_films,
         directorFilmography=director_filmography,
         castFilmography=cast_filmography,
+        genreHistoricalPerformance=genre_historical_performance,
     )
 
 
@@ -185,6 +221,75 @@ def build_actual_results_payload(
         criticScore=_rating_from_source(omdb_data, "Rotten Tomatoes")
         or (float(metascore) if metascore and metascore != "N/A" else None),
     )
+
+
+def _dedupe_exclude(entries: list, exclude_id: Optional[int], limit: int) -> List[dict]:
+    """Like _other_films, but preserves the input order instead of
+    re-sorting by release date -- used for genre-historical-performance
+    results, which arrive pre-sorted by box office from TMDB's Discover
+    endpoint and should stay that way."""
+    seen = set()
+    out = []
+    for entry in entries:
+        movie_id = entry.get("id")
+        if movie_id is None or movie_id == exclude_id or movie_id in seen:
+            continue
+        if not entry.get("release_date"):
+            continue
+        seen.add(movie_id)
+        out.append(entry)
+        if len(out) >= limit:
+            break
+    return out
+
+
+def _fetch_financials(movie_ids: List[int], tmdb_api_key: str) -> Dict[int, dict]:
+    """{tmdb_id: {"budget": int|None, "revenue": int|None}} for each id,
+    skipping any that fail to fetch. One extra /movie/{id} call per id --
+    the lightweight list entries these ids come from don't carry
+    budget/revenue, only the full details endpoint does."""
+    financials: Dict[int, dict] = {}
+    for movie_id in movie_ids:
+        try:
+            details = tmdb_client.get_movie_details(movie_id, tmdb_api_key)
+        except tmdb_client.TMDBError:
+            continue
+        financials[movie_id] = {
+            "budget": details.get("budget") or None,
+            "revenue": details.get("revenue") or None,
+        }
+    return financials
+
+
+def _fetch_genre_historical_performance(tmdb_details: dict, tmdb_api_key: str) -> List[dict]:
+    """Already-released films in this film's primary genre, sorted by
+    worldwide box office, with budget/revenue backfilled -- independent of
+    TMDB's "similar movies" algorithm, which optimizes for topical/cast
+    similarity rather than genre + financial performance. See
+    schema.py's genreHistoricalPerformance docstring."""
+    genres = tmdb_details.get("genres", [])
+    release_date = tmdb_details.get("release_date")
+    movie_id = tmdb_details.get("id")
+    if not genres or not release_date:
+        return []
+
+    genre_id = tmdb_client.GENRE_NAME_TO_ID.get(genres[0]["name"])
+    if genre_id is None:
+        return []
+
+    try:
+        results = tmdb_client.discover_movies_by_genre(genre_id, release_date, tmdb_api_key)
+    except tmdb_client.TMDBError:
+        return []
+
+    candidates = _dedupe_exclude(results, movie_id, limit=FINANCIALS_LIMIT)
+    financials = _fetch_financials([c["id"] for c in candidates], tmdb_api_key)
+
+    return [
+        {**c, "budget": financials.get(c["id"], {}).get("budget"),
+         "revenue": financials.get(c["id"], {}).get("revenue")}
+        for c in candidates
+    ]
 
 
 def fetch_film(
@@ -239,11 +344,29 @@ def fetch_film(
             continue
         cast_credits.append((cast_entry["name"], person_credits))
 
+    movie_id = tmdb_details.get("id")
+    similar = tmdb_details.get("similar", {}).get("results", [])
+    comparable_financials = _fetch_financials(
+        [f["id"] for f in _other_films(similar, movie_id, limit=5)], tmdb_api_key
+    )
+
+    franchise_financials: Dict[int, dict] = {}
+    if collection_data:
+        parts = _other_films(collection_data.get("parts", []), movie_id)
+        franchise_financials = _fetch_financials(
+            [p["id"] for p in parts[:FINANCIALS_LIMIT]], tmdb_api_key
+        )
+
+    genre_historical = _fetch_genre_historical_performance(tmdb_details, tmdb_api_key)
+
     pre_release = build_pre_release_payload(
         tmdb_details,
         collection_data=collection_data,
         director_credits=director_credits,
         cast_credits=cast_credits,
+        comparable_financials=comparable_financials,
+        franchise_financials=franchise_financials,
+        genre_historical=genre_historical,
     )
     actual_results = build_actual_results_payload(tmdb_details, omdb_data)
     return pre_release, actual_results

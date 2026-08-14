@@ -52,6 +52,31 @@ async function loadSlate() {
   renderSlate();
 }
 
+function genreHistorySummary(film) {
+  const payload = film.payload || {};
+  const genre = (payload.genres && payload.genres[0]) || null;
+  const historical = payload.genreHistoricalPerformance || [];
+  const withFinancials = historical.filter((h) => h.budget && h.boxOfficeWorldwide);
+
+  if (!genre) return "Genre unknown -- no historical comp data.";
+  if (withFinancials.length === 0) {
+    return `${escapeHtml(genre)} -- no historical box office data available for comps.`;
+  }
+
+  const avgMultiple =
+    withFinancials.reduce((sum, h) => sum + h.boxOfficeWorldwide / h.budget, 0) /
+    withFinancials.length;
+  const avgBoxOffice =
+    withFinancials.reduce((sum, h) => sum + h.boxOfficeWorldwide, 0) / withFinancials.length;
+
+  return (
+    `${escapeHtml(genre)} comps historically return <span class="multiple">${avgMultiple.toFixed(1)}x</span> budget ` +
+    `(avg $${(avgBoxOffice / 1e6).toFixed(0)}M worldwide, ${withFinancials.length} films: ${withFinancials
+      .map((h) => escapeHtml(h.title))
+      .join(", ")})`
+  );
+}
+
 function renderSlate() {
   slateCount.textContent = `Your slate · ${state.films.length}/${MAX_FILMS} films`;
   slateList.innerHTML = "";
@@ -62,9 +87,12 @@ function renderSlate() {
       const row = document.createElement("div");
       row.className = "slate-item";
       row.innerHTML = `
-        <span class="idx mono">${String(i + 1).padStart(2, "0")}</span>
-        <span class="title">${escapeHtml(film.title)}</span>
-        <button class="remove-btn" data-tmdb-id="${film.tmdb_id}" title="Remove from slate">&times;</button>
+        <div class="slate-item-row">
+          <span class="idx mono">${String(i + 1).padStart(2, "0")}</span>
+          <span class="title">${escapeHtml(film.title)}</span>
+          <button class="remove-btn" data-tmdb-id="${film.tmdb_id}" title="Remove from slate">&times;</button>
+        </div>
+        <div class="genre-history">${genreHistorySummary(film)}</div>
       `;
       slateList.appendChild(row);
     });

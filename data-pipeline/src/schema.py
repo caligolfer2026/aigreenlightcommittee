@@ -16,12 +16,16 @@ class ComparableFilm(TypedDict):
     title: str
     releaseDate: Optional[str]
     rating: Optional[float]
+    budget: Optional[int]
+    boxOfficeWorldwide: Optional[int]
 
 
 class FranchiseEntry(TypedDict):
     title: str
     releaseDate: Optional[str]
     rating: Optional[float]
+    budget: Optional[int]
+    boxOfficeWorldwide: Optional[int]
 
 
 class PastFilm(TypedDict):
@@ -49,6 +53,12 @@ class PreReleaseFilm(TypedDict):
     comparableFilms: List[ComparableFilm]
     directorFilmography: List[PastFilm]
     castFilmography: List[CastMemberFilmography]
+    # Historical financial performance of already-released films in this
+    # film's primary genre, sourced independently of TMDB's "similar movies"
+    # algorithm (which optimizes for topical/cast similarity, not genre +
+    # box office) -- this is what agents should actually reason from for
+    # "how do films like this typically perform" questions.
+    genreHistoricalPerformance: List[ComparableFilm]
 
 
 class ActualResults(TypedDict):

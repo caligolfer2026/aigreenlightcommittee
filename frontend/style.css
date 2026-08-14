@@ -94,12 +94,18 @@ body {
 
 .slate-item {
   display: flex;
-  align-items: center;
-  gap: 0.75rem;
+  flex-direction: column;
+  gap: 0.3rem;
   background: #100e0b;
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 0.85rem 1rem;
+}
+
+.slate-item-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
 }
 
 .slate-item .idx {
@@ -110,6 +116,13 @@ body {
 }
 
 .slate-item .title { font-weight: 600; flex: 1; }
+
+.slate-item .genre-history {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  padding-left: 2.35rem;
+}
+.slate-item .genre-history .multiple { color: var(--gold-dim); font-weight: 600; }
 
 .slate-item .remove-btn {
   background: transparent;
