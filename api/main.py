@@ -22,12 +22,14 @@ sys.path.insert(0, str(REPO_ROOT / "data-pipeline"))
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 
+from committee.aggregation import aggregate_votes
 from committee.agents import run_agent
+from committee.pitch import parse_pitch
 from committee.scoring import run_scoring
 from db.env import load_env_file
 from db.prerelease import create_session, get_slate, get_votes, record_vote, upsert_film
 from db.results import get_actual_results, get_scores, record_score, upsert_actual_results
-from src.pipeline import fetch_film, find_movie
+from src.pipeline import build_pitch_payload, fetch_film, find_movie
 
 app = FastAPI(title="AI Greenlight Committee")
 
@@ -78,6 +80,62 @@ def add_film(title: str, slate: str = "default"):
     }
 
 
+@app.post("/api/slate/add-pitch")
+def add_pitch(pitch: str, slate: str = "default"):
+    """Slate intake for a hypothetical pitch -- "we want to greenlight a
+    new horror film like The Conjuring" -- rather than an existing real
+    film. Parses the pitch (genre, logline, optional named comp film),
+    then builds a synthetic pre-release package: no cast/director/box
+    office of its own, but real genreHistoricalPerformance data (the last
+    N *already-released* films in that genre) for the committee to reason
+    against. There is deliberately no real outcome to reveal for a pitch
+    like this later -- see committee/aggregation.py for how the committee
+    reaches its own decision instead."""
+    load_env_file(".env.local")
+    tmdb_key = os.environ.get("TMDB_API_KEY")
+    if not tmdb_key:
+        raise HTTPException(status_code=500, detail="TMDB_API_KEY not set in .env.local")
+
+    parsed = parse_pitch(pitch)
+    if not parsed.get("genre"):
+        raise HTTPException(
+            status_code=400,
+            detail="Couldn't detect a genre from that pitch -- try mentioning one explicitly (e.g. 'a new horror film...').",
+        )
+
+    payload = build_pitch_payload(
+        title=parsed["title"],
+        genre=parsed["genre"],
+        logline=parsed["logline"],
+        reference_title=parsed.get("referenceTitle"),
+        tmdb_api_key=tmdb_key,
+        marketing_hook=parsed.get("marketingHook"),
+        target_demo=parsed.get("targetDemo"),
+        budget=parsed.get("budget"),
+    )
+
+    # Real TMDB ids are always positive; a negative, deterministic id keyed
+    # off the pitch text keeps this collision-free with real films and
+    # stable if the same pitch is re-submitted.
+    synthetic_tmdb_id = -(abs(hash(pitch)) % 1_000_000_000 + 1)
+    film_id = upsert_film(
+        tmdb_id=synthetic_tmdb_id,
+        title=payload["title"],
+        release_date=None,
+        payload=payload,
+        slate=slate,
+    )
+
+    return {
+        "id": film_id,
+        "tmdb_id": synthetic_tmdb_id,
+        "title": payload["title"],
+        "release_date": None,
+        "payload": payload,
+        "is_pitch": True,
+    }
+
+
 @app.post("/api/session")
 def new_session(slate: str = "default"):
     session_id = create_session(slate=slate)
@@ -106,8 +164,20 @@ def agent_run(session_id: int, film_id: int, role: str, slate: str = "default"):
         role=result["role"],
         vote=result["vote"],
         argument=result["argument"],
+        confidence=result.get("confidence"),
     )
     return result
+
+
+@app.get("/api/session/{session_id}/aggregate")
+def session_aggregate(session_id: int, tmdb_id: int):
+    """The committee's own decision -- a confidence-weighted read of the
+    four votes for one film, computed the moment they're all in. This has
+    nothing to do with what actually happened; it's purely "given what our
+    four people said, where does the room land." See
+    committee/aggregation.py."""
+    votes = [v for v in get_votes(session_id) if v["tmdb_id"] == tmdb_id]
+    return aggregate_votes(votes)
 
 
 @app.post("/api/session/{session_id}/score-run")

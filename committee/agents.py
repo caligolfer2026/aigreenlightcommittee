@@ -165,10 +165,24 @@ VOTE_SCHEMA = {
         "role": {"type": "string"},
         "argument": {"type": "string"},
         "vote": {"type": "string", "enum": ["greenlight", "pass"]},
+        "confidence": {"type": "integer"},
     },
-    "required": ["role", "argument", "vote"],
+    "required": ["role", "argument", "vote", "confidence"],
     "additionalProperties": False,
 }
+
+# Appended to every persona's system prompt so the confidence instruction
+# lives in one place instead of duplicated across four large voice blocks.
+_CONFIDENCE_INSTRUCTION = (
+    "\n\nAlong with your argument and vote, also give a confidence score "
+    "from 0 to 100 for your own vote -- how sure you are, not how strongly "
+    "you feel about the film. A borderline call you're genuinely split on "
+    "should read as low confidence (e.g. 40-60) even if your prose sounds "
+    "decisive in voice; a call backed by clear, specific evidence in the "
+    "payload should read as high confidence (80+). Don't default to a "
+    "round number like 50/70/90 out of habit -- vary it based on how much "
+    "the payload actually supports your call."
+)
 
 
 def _mock_vote(role: str, film_payload: dict) -> dict:
@@ -188,6 +202,7 @@ def _mock_vote(role: str, film_payload: dict) -> dict:
     return {
         "role": role,
         "vote": vote,
+        "confidence": 30 + (seed % 60),  # deterministic, 30-89
         "argument": (
             f"[MOCK -- no ANTHROPIC_API_KEY set] Placeholder {role} argument "
             f"for {title!r}. Set ANTHROPIC_API_KEY in .env.local to get a "
@@ -241,7 +256,7 @@ def _mock_creative_vote(film_payload: dict) -> dict:
         "[MOCK -- no ANTHROPIC_API_KEY set. Set one in .env.local for "
         "real Claude-generated arguments.]"
     )
-    return {"role": "creative", "vote": vote, "argument": argument}
+    return {"role": "creative", "vote": vote, "confidence": 40 + (seed % 55), "argument": argument}
 
 
 _MARKETING_MOCK_AWARENESS_TIERS = ["Low", "Medium", "High"]
@@ -271,7 +286,7 @@ def _mock_marketing_vote(film_payload: dict) -> dict:
         "[MOCK -- no ANTHROPIC_API_KEY set. Set one in .env.local for "
         "real Claude-generated arguments.]"
     )
-    return {"role": "marketing", "vote": vote, "argument": argument}
+    return {"role": "marketing", "vote": vote, "confidence": 35 + (seed % 60), "argument": argument}
 
 
 # Ported from finance/PERSONA.md's "missing-budget exception": if the
@@ -285,7 +300,14 @@ _FINANCE_MISSING_BUDGET_ARGUMENT = (
 
 
 def _finance_missing_budget_vote() -> dict:
-    return {"role": "finance", "vote": "pass", "argument": _FINANCE_MISSING_BUDGET_ARGUMENT}
+    # High confidence in the *process* call (pass on missing data), not a
+    # read on the film itself -- there's nothing to be uncertain about here.
+    return {
+        "role": "finance",
+        "vote": "pass",
+        "confidence": 95,
+        "argument": _FINANCE_MISSING_BUDGET_ARGUMENT,
+    }
 
 
 _FINANCE_MOCK_IDIOMS = [
@@ -316,31 +338,34 @@ def _mock_finance_vote(film_payload: dict) -> dict:
         f"{verdict}\n\n[MOCK -- no ANTHROPIC_API_KEY set. Set one in .env.local "
         "for real Claude-generated arguments.]"
     )
-    return {"role": "finance", "vote": vote, "argument": argument}
+    return {"role": "finance", "vote": vote, "confidence": 40 + (seed % 55), "argument": argument}
 
 
 def _system_prompt_for(role: str) -> str:
     if role == "creative":
-        return CREATIVE_SYSTEM_PROMPT
-    if role == "finance":
-        return FINANCE_SYSTEM_PROMPT
-    if role == "marketing":
-        return MARKETING_SYSTEM_PROMPT
-    framing = ROLE_FRAMING[role]
-    return (
-        f"You are the {role.upper()} member of a studio greenlight committee. "
-        f"Argue for or against greenlighting this film based only on "
-        f"{framing}. You must not use any information that would only "
-        "exist after the film's release (reviews, box office, audience "
-        "scores) for the film being evaluated -- you only have pre-release "
-        "information. Other, already-released films referenced in the "
-        "payload (comparable titles, franchise entries, filmography) may "
-        "have their own historical ratings; those are fair game."
-    )
+        base = CREATIVE_SYSTEM_PROMPT
+    elif role == "finance":
+        base = FINANCE_SYSTEM_PROMPT
+    elif role == "marketing":
+        base = MARKETING_SYSTEM_PROMPT
+    else:
+        framing = ROLE_FRAMING[role]
+        base = (
+            f"You are the {role.upper()} member of a studio greenlight committee. "
+            f"Argue for or against greenlighting this film based only on "
+            f"{framing}. You must not use any information that would only "
+            "exist after the film's release (reviews, box office, audience "
+            "scores) for the film being evaluated -- you only have pre-release "
+            "information. Other, already-released films referenced in the "
+            "payload (comparable titles, franchise entries, filmography) may "
+            "have their own historical ratings; those are fair game."
+        )
+    return base + _CONFIDENCE_INSTRUCTION
 
 
 def run_agent(role: str, film_payload: dict) -> dict:
-    """Generate one agent's argument + vote for a film's pre-release payload."""
+    """Generate one agent's argument + vote (+ confidence 0-100) for a
+    film's pre-release payload."""
     if role == "finance" and not film_payload.get("budget"):
         return _finance_missing_budget_vote()
 
@@ -351,4 +376,5 @@ def run_agent(role: str, film_payload: dict) -> dict:
     user_content = json.dumps(film_payload, indent=2)
     result = call_structured(system_prompt, user_content, VOTE_SCHEMA)
     result["role"] = role
+    result["confidence"] = max(0, min(100, int(result.get("confidence", 50))))
     return result

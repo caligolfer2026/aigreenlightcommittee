@@ -23,8 +23,8 @@ const loadSlateBtn = document.getElementById("load-slate-btn");
 const slateList = document.getElementById("slate-list");
 const slateCount = document.getElementById("slate-count");
 const conveneBtn = document.getElementById("convene-btn");
-const filmTitleInput = document.getElementById("film-title-input");
-const addFilmBtn = document.getElementById("add-film-btn");
+const pitchInput = document.getElementById("pitch-input");
+const addPitchBtn = document.getElementById("add-pitch-btn");
 const addFilmStatus = document.getElementById("add-film-status");
 
 const delibFilmCount = document.getElementById("delib-film-count");
@@ -32,6 +32,7 @@ const delibFilmTitle = document.getElementById("delib-film-title");
 const delibFilmMeta = document.getElementById("delib-film-meta");
 const delibTally = document.getElementById("delib-tally");
 const agentCardsEl = document.getElementById("agent-cards");
+const aggregationBanner = document.getElementById("aggregation-banner");
 const nextFilmBtn = document.getElementById("next-film-btn");
 
 const verdictCardsEl = document.getElementById("verdict-cards");
@@ -98,7 +99,7 @@ function renderSlate() {
     });
   }
   conveneBtn.disabled = state.films.length === 0;
-  addFilmBtn.disabled = state.films.length >= MAX_FILMS;
+  addPitchBtn.disabled = state.films.length >= MAX_FILMS;
 
   slateList.querySelectorAll(".remove-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -111,32 +112,27 @@ function renderSlate() {
 
 loadSlateBtn.addEventListener("click", loadSlate);
 
-addFilmBtn.addEventListener("click", addFilm);
-filmTitleInput.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") addFilm();
+addPitchBtn.addEventListener("click", addPitch);
+pitchInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") addPitch();
 });
 
-async function addFilm() {
-  const title = filmTitleInput.value.trim();
-  if (!title) return;
+async function addPitch() {
+  const pitch = pitchInput.value.trim();
+  if (!pitch) return;
   if (state.films.length >= MAX_FILMS) {
     addFilmStatus.textContent = `Slate is full (max ${MAX_FILMS} films).`;
     addFilmStatus.className = "add-film-status error";
     return;
   }
-  if (state.films.some((f) => f.title.toLowerCase() === title.toLowerCase())) {
-    addFilmStatus.textContent = "Already in your slate.";
-    addFilmStatus.className = "add-film-status error";
-    return;
-  }
 
-  addFilmBtn.disabled = true;
-  addFilmStatus.textContent = `Looking up "${title}"...`;
+  addPitchBtn.disabled = true;
+  addFilmStatus.textContent = `Evaluating pitch...`;
   addFilmStatus.className = "add-film-status";
 
   try {
     const resp = await fetch(
-      `/api/slate/add-film?title=${encodeURIComponent(title)}&slate=${encodeURIComponent(state.slateName)}`,
+      `/api/slate/add-pitch?pitch=${encodeURIComponent(pitch)}&slate=${encodeURIComponent(state.slateName)}`,
       { method: "POST" }
     );
     if (!resp.ok) {
@@ -145,14 +141,14 @@ async function addFilm() {
     }
     const film = await resp.json();
     state.films.push(film);
-    filmTitleInput.value = "";
+    pitchInput.value = "";
     addFilmStatus.textContent = "";
     renderSlate();
   } catch (e) {
     addFilmStatus.textContent = e.message;
     addFilmStatus.className = "add-film-status error";
   } finally {
-    addFilmBtn.disabled = state.films.length >= MAX_FILMS;
+    addPitchBtn.disabled = state.films.length >= MAX_FILMS;
   }
 }
 
@@ -177,6 +173,7 @@ async function runFilm(index) {
 
   state.votesByFilm[film.tmdb_id] = {};
   updateTally(film);
+  aggregationBanner.classList.add("hidden");
 
   agentCardsEl.innerHTML = "";
   const cardEls = {};
@@ -208,17 +205,37 @@ async function runFilm(index) {
   );
 
   nextFilmBtn.disabled = false;
+  await renderAggregation(film);
 }
 
 function renderAgentCard(cardEl, role, vote) {
+  const confidence = vote.confidence != null ? `${vote.confidence}% confident` : "";
   cardEl.innerHTML = `
     <div class="badge role-${role}">${ROLE_LABEL[role]}</div>
     <div class="body">
       <div class="role-name">
         ${role}
-        <span class="vote-badge ${vote.vote}">${vote.vote.toUpperCase()}</span>
+        <span class="vote-badge ${vote.vote}">${vote.vote.toUpperCase()}${confidence ? ` &middot; ${confidence}` : ""}</span>
       </div>
       <div class="argument-text">${escapeHtml(vote.argument)}</div>
+    </div>
+  `;
+}
+
+async function renderAggregation(film) {
+  const resp = await fetch(
+    `/api/session/${state.sessionId}/aggregate?tmdb_id=${film.tmdb_id}`
+  );
+  if (!resp.ok) return;
+  const decision = await resp.json();
+
+  aggregationBanner.className = `aggregation-banner outcome-${decision.outcome}`;
+  aggregationBanner.innerHTML = `
+    <div class="aggregation-outcome">Committee decision: ${decision.outcome.toUpperCase()}</div>
+    <div class="aggregation-detail">
+      Confidence-weighted score ${decision.confidenceWeightedScore}/100 &middot;
+      ${decision.greenlightCount} greenlight / ${decision.passCount} pass &middot;
+      avg confidence ${decision.averageConfidence}%
     </div>
   `;
 }

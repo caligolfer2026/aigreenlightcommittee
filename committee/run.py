@@ -10,6 +10,7 @@ import argparse
 from db.prerelease import create_session, get_slate, get_votes, record_vote
 from db.results import get_actual_results, record_score
 
+from .aggregation import aggregate_votes
 from .agents import run_agent
 from .scoring import run_scoring
 
@@ -38,12 +39,22 @@ def main() -> None:
                 role=result["role"],
                 vote=result["vote"],
                 argument=result["argument"],
+                confidence=result.get("confidence"),
             )
-            print(f"[{role}] {result['vote'].upper()}: {result['argument']}\n")
+            print(f"[{role}] {result['vote'].upper()} ({result.get('confidence')}% confident): {result['argument']}\n")
 
     votes_by_tmdb_id: dict[int, list[dict]] = {}
     for vote in get_votes(session_id):
         votes_by_tmdb_id.setdefault(vote["tmdb_id"], []).append(vote)
+
+    for film in films:
+        film_votes = votes_by_tmdb_id.get(film["tmdb_id"], [])
+        decision = aggregate_votes(film_votes)
+        print(
+            f"=== COMMITTEE DECISION: {film['title']} — {decision['outcome'].upper()} "
+            f"(confidence-weighted score {decision['confidenceWeightedScore']}/100, "
+            f"{decision['greenlightCount']} greenlight / {decision['passCount']} pass) ===\n"
+        )
 
     for film in films:
         film_votes = votes_by_tmdb_id.get(film["tmdb_id"], [])

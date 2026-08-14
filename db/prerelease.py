@@ -88,22 +88,31 @@ def create_session(slate: str = "default", notes: Optional[str] = None) -> int:
         conn.close()
 
 
-def record_vote(session_id: int, film_id: int, role: str, vote: str, argument: str) -> None:
+def record_vote(
+    session_id: int,
+    film_id: int,
+    role: str,
+    vote: str,
+    argument: str,
+    confidence: Optional[int] = None,
+) -> None:
     """Record one agent's vote + argument for one film in a session. `role`
     must be one of creative/finance/marketing/distribution; `vote` must be
-    greenlight/pass -- matches the data contract in the root README."""
+    greenlight/pass -- matches the data contract in the root README.
+    `confidence` (0-100) is optional so older callers still work."""
     conn = get_prerelease_connection()
     try:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                insert into votes (session_id, film_id, role, vote, argument)
-                values (%s, %s, %s, %s, %s)
+                insert into votes (session_id, film_id, role, vote, confidence, argument)
+                values (%s, %s, %s, %s, %s, %s)
                 on conflict (session_id, film_id, role) do update set
                     vote = excluded.vote,
+                    confidence = excluded.confidence,
                     argument = excluded.argument
                 """,
-                (session_id, film_id, role, vote, argument),
+                (session_id, film_id, role, vote, confidence, argument),
             )
         conn.commit()
     finally:
@@ -119,7 +128,7 @@ def get_votes(session_id: int) -> List[dict]:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                select v.film_id, f.tmdb_id, f.title, v.role, v.vote, v.argument, v.created_at
+                select v.film_id, f.tmdb_id, f.title, v.role, v.vote, v.confidence, v.argument, v.created_at
                 from votes v
                 join films f on f.id = v.film_id
                 where v.session_id = %s
@@ -137,8 +146,9 @@ def get_votes(session_id: int) -> List[dict]:
             "title": r[2],
             "role": r[3],
             "vote": r[4],
-            "argument": r[5],
-            "created_at": r[6].isoformat(),
+            "confidence": r[5],
+            "argument": r[6],
+            "created_at": r[7].isoformat(),
         }
         for r in rows
     ]

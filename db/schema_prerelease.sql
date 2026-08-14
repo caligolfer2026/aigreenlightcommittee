@@ -31,9 +31,14 @@ create table if not exists votes (
     film_id      integer not null references films(id) on delete cascade,
     role         text not null check (role in ('creative', 'finance', 'marketing', 'distribution')),
     vote         text not null check (vote in ('greenlight', 'pass')),
+    confidence   integer,  -- 0-100, how sure the agent is in its own vote
     argument     text not null,
     created_at   timestamptz not null default now(),
     unique (session_id, film_id, role)
 );
+
+-- Safe to re-run: adds the column to a pre-existing votes table (this
+-- schema previously shipped without it) without touching existing rows.
+alter table votes add column if not exists confidence integer;
 
 create index if not exists votes_session_idx on votes (session_id);

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>AI Greenlight Committee</title>
-<link rel="stylesheet" href="style.css?v=4">
+<link rel="stylesheet" href="style.css?v=5">
 </head>
 <body>
 
@@ -17,9 +17,10 @@
         <div class="eyebrow center">Pre-release committee &middot; Four agents &middot; One verdict</div>
         <h1 class="headline">The Greenlight<br><span class="muted">Committee</span></h1>
         <p class="lede">
-          Four agents &mdash; creative, finance, marketing, distribution &mdash; argue
-          over a slate of films using only pre-release data. They vote. Then a
-          fifth agent reveals the actual box office and scores the committee.
+          Pitch a film you want greenlit &mdash; genre, comps, whatever you've
+          got. Four agents argue it using only pre-release data and historical
+          genre performance, then vote with a confidence score. The room's
+          decision is aggregated from all four reads, not just a head count.
         </p>
       </div>
 
@@ -33,10 +34,10 @@
           <button id="load-slate-btn" class="btn-ghost">Load</button>
         </div>
 
-        <div class="slate-input-row">
-          <label for="film-title-input" class="visually-hidden">Add film title</label>
-          <input id="film-title-input" placeholder="Add film title...">
-          <button id="add-film-btn" class="btn-ghost">+</button>
+        <div class="slate-input-row pitch-row">
+          <label for="pitch-input" class="visually-hidden">Pitch a film</label>
+          <input id="pitch-input" placeholder="e.g. &quot;a new horror film like The Conjuring&quot;">
+          <button id="add-pitch-btn" class="btn-ghost">+</button>
         </div>
         <div id="add-film-status" class="add-film-status"></div>
 
@@ -70,6 +71,8 @@
 
       <div id="agent-cards" class="agent-cards"></div>
 
+      <div id="aggregation-banner" class="aggregation-banner hidden"></div>
+
       <div class="delib-footer">
         <button id="next-film-btn" class="btn-gold" disabled>Next Film</button>
       </div>
@@ -86,6 +89,6 @@
     </div>
   </section>
 
-  <script src="app.js?v=4"></script>
+  <script src="app.js?v=5"></script>
 </body>
 </html>
