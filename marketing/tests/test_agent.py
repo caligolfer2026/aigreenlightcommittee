@@ -1,6 +1,7 @@
 import unittest
 
 from marketing.agent import evaluate_marketing
+from marketing.prompt import SYSTEM_PROMPT
 
 
 FILM = {
@@ -36,6 +37,14 @@ class FakeClient:
 
 
 class MarketingAgentTests(unittest.TestCase):
+    def test_prompt_balances_executive_voice_with_evidence(self):
+        self.assertIn("memorable marketing thesis", SYSTEM_PROMPT)
+        self.assertIn("emotional consumer promise", SYSTEM_PROMPT)
+        self.assertIn(
+            "Personality controls the delivery; evidence and the framework control the vote",
+            SYSTEM_PROMPT,
+        )
+
     def test_returns_exact_shared_contract_and_awareness_marker(self):
         result = evaluate_marketing(FILM, client=FakeClient())
         self.assertEqual(set(result), {"role", "argument", "vote"})
