@@ -14,7 +14,10 @@ FORBIDDEN_FILM_FIELDS = {
     "boxOfficeWorldwide",
     "criticScore",
     "imdbRating",
+    "imdbVotes",
     "revenue",
+    "tmdbPopularity",
+    "tmdbVoteCount",
     "vote_average",
     "vote_count",
 }

@@ -58,6 +58,9 @@ class MarketingAgentTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "result fields are forbidden"):
             evaluate_marketing({**FILM, "boxOfficeWorldwide": 500000000}, FakeClient())
 
+        with self.assertRaisesRegex(ValueError, "result fields are forbidden"):
+            evaluate_marketing({**FILM, "tmdbPopularity": 100.0}, FakeClient())
+
     def test_rejects_invalid_tier(self):
         client = FakeClient(
             {

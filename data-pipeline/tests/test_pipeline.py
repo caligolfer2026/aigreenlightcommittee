@@ -14,7 +14,9 @@ TMDB_DETAILS = {
     "budget": 190000000,
     "revenue": 711800000,
     "overview": "A hero saves the day.",
+    "popularity": 123.45,
     "vote_average": 7.8,
+    "vote_count": 4567,
     "belongs_to_collection": {"id": 100, "name": "Example Collection"},
     "credits": {
         "crew": [{"id": 10, "name": "Jane Director", "job": "Director"}],
@@ -80,6 +82,7 @@ CAST_CREDITS = [
 OMDB_DATA = {
     "Response": "True",
     "imdbRating": "8.1",
+    "imdbVotes": "123,456",
     "Metascore": "74",
     "BoxOffice": "$300,000,000",
     "Ratings": [
@@ -156,6 +159,9 @@ class ActualResultsPayloadTests(unittest.TestCase):
         self.assertEqual(payload["boxOfficeDomestic"], 300000000)
         self.assertEqual(payload["boxOfficeWorldwide"], 711800000)
         self.assertEqual(payload["imdbRating"], 8.1)
+        self.assertEqual(payload["imdbVotes"], 123456)
+        self.assertEqual(payload["tmdbPopularity"], 123.45)
+        self.assertEqual(payload["tmdbVoteCount"], 4567)
         self.assertEqual(payload["audienceScore"], 78.0)
         self.assertEqual(payload["criticScore"], 88.0)
 
@@ -163,6 +169,9 @@ class ActualResultsPayloadTests(unittest.TestCase):
         payload = build_actual_results_payload(TMDB_DETAILS, None)
         self.assertIsNone(payload["boxOfficeDomestic"])
         self.assertIsNone(payload["imdbRating"])
+        self.assertIsNone(payload["imdbVotes"])
+        self.assertEqual(payload["tmdbPopularity"], 123.45)
+        self.assertEqual(payload["tmdbVoteCount"], 4567)
         self.assertEqual(payload["boxOfficeWorldwide"], 711800000)
         self.assertEqual(payload["audienceScore"], 78.0)
 

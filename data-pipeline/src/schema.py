@@ -55,5 +55,8 @@ class ActualResults(TypedDict):
     boxOfficeDomestic: Optional[int]
     boxOfficeWorldwide: Optional[int]
     imdbRating: Optional[float]
+    imdbVotes: Optional[int]
+    tmdbPopularity: Optional[float]
+    tmdbVoteCount: Optional[int]
     audienceScore: Optional[float]
     criticScore: Optional[float]

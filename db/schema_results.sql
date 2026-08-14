@@ -11,7 +11,9 @@ create table if not exists actual_results (
     id                     serial primary key,
     tmdb_id                integer not null unique,  -- matches films.tmdb_id in the pre-release db
     title                  text not null,
-    actual_results_payload jsonb not null,  -- exact ActualResults shape from data-pipeline/src/schema.py
+    -- Exact ActualResults JSON shape from data-pipeline/src/schema.py. Awareness
+    -- scoring uses tmdbPopularity, tmdbVoteCount, and imdbVotes from this payload.
+    actual_results_payload jsonb not null,
     revealed_at            timestamptz not null default now()
 );
 

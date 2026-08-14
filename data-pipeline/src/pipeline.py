@@ -30,6 +30,16 @@ def _parse_money(value: Optional[str]) -> Optional[int]:
     return int(match.group(0).replace(",", ""))
 
 
+def _parse_count(value: Optional[str]) -> Optional[int]:
+    """Parse an OMDb count such as ``"123,456"`` into an integer."""
+    if not value or value == "N/A":
+        return None
+    match = MONEY_RE.search(value)
+    if not match:
+        return None
+    return int(match.group(0).replace(",", ""))
+
+
 def _normalize_rating(vote_average: Optional[float]) -> Optional[float]:
     """TMDB's vote_average is 0-10; normalize to 0-100 to match the rest of
     the app's rating scale. Only ever applied to *other, already-released*
@@ -177,6 +187,13 @@ def build_actual_results_payload(
         boxOfficeDomestic=_parse_money(omdb_data.get("BoxOffice")),
         boxOfficeWorldwide=tmdb_details.get("revenue") or None,
         imdbRating=float(imdb_rating) if imdb_rating and imdb_rating != "N/A" else None,
+        imdbVotes=_parse_count(omdb_data.get("imdbVotes")),
+        tmdbPopularity=float(tmdb_details["popularity"])
+        if tmdb_details.get("popularity") is not None
+        else None,
+        tmdbVoteCount=int(tmdb_details["vote_count"])
+        if tmdb_details.get("vote_count") is not None
+        else None,
         # TMDB's vote_average is a 0-10 user (audience) score; normalize to 0-100
         # to sit alongside the other percentage-based scores.
         audienceScore=round(tmdb_details["vote_average"] * 10, 1)
