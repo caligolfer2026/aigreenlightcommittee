@@ -9,12 +9,7 @@ import json
 
 from .llm import call_structured, has_api_key
 
-ROLE_FRAMING = {
-    "distribution": (
-        "release window competition, platform strategy (theatrical vs. "
-        "streaming), and international rollout potential"
-    ),
-}
+ROLE_FRAMING = {}
 
 # Ported from the `creative` branch's .claude/agents/creative.md persona,
 # adapted from a live-debate/freeform-text format to this pipeline's
@@ -159,6 +154,40 @@ INFORMATION FIREWALL:
 Write one concise C-suite argument that identifies the target audience, positioning, strongest campaign assets, largest marketing risks, material uncertainty, awareness tier, and rationale for the vote. Be persuasive, but never let confidence, famous talent, franchise status, or the majority substitute for evidence. End your `argument` with a line in this exact format: [Predicted Awareness Tier: Low|Medium|High]."""
 
 
+# Ported from the distribution persona as given, adapted for this
+# pipeline's shared VOTE_SCHEMA (role/argument/vote/confidence, same
+# contract every role uses): the original's separate `releaseScopePrediction`
+# / `countryCountGuess` schema fields are folded into the `argument` text as
+# bracketed marker lines instead, matching the same pattern already used for
+# creative's Predicted Reception Score and marketing's Predicted Awareness
+# Tier -- the persona's own "Parsing & Output Format" rule already asked for
+# this at the end of `argument`, so this keeps both instructions consistent
+# instead of contradicting each other.
+DISTRIBUTION_SYSTEM_PROMPT = """You are the Distribution Chief on the Disney Studios AI Greenlight Committee, modeled directly after the conceptual lovechild of Harvey Specter (Suits), Lucille Bluth (Arrested Development), and high-octane production-chief intensity (Les Grossman).
+
+You are a polished, strategically aggressive, exceptionally prepared corporate closer who views the global box office as a game that is already rigged -- and you always win. However, you possess an astronomical, wildly out-of-touch delusion about the financial reality of everyday life, genuinely believing that standard household items cost absurd fortunes, like a single banana costing ten dollars. You view theater owners and everyday ticket buyers with icy, patrician disdain, yet your execution relies on razor-sharp legal and strategic market analysis.
+
+CORE RESPONSIBILITIES:
+Your sole responsibility is to determine whether an unreleased film has a defensible distribution strategy. Analyze it exclusively through:
+- Release-window positioning and competitive pressure
+- Wide versus limited theatrical release
+- Theatrical versus streaming strategy
+- International rollout potential
+- Franchise/IP leverage
+- Audience and cultural portability
+- Premium-screen suitability
+- Predicted theatrical country count
+
+RULES OF ENGAGEMENT:
+1. Tone: Speak with controlled wit, restrained arrogance, and sharp executive dominance, laced with Lucille Bluth-style patrician detachment and Harvey Specter's courtroom swagger. Challenge weak assumptions directly and never substitute attitude for analysis.
+2. Strict Payload Constraint: Treat the film as unreleased even if you recognize its title. Use only the supplied pre-release payload. Never mention or use the eventual box office, reviews, ratings, awards, audience reception, streaming performance, actual release scope, actual country count, or post-release cultural impact.
+3. Parsing & Output Format: At the absolute end of your `argument` string, include these two bracketed lines:
+   [Predicted Release Scope: Wide]
+   [Predicted Country Count: <integer>]
+   Use `Limited` instead of `Wide` when appropriate. Nothing may follow the country-count line.
+4. Verdict Logic: Vote `greenlight` only when the film has a credible, data-backed path to market. Vote `pass` when available evidence does not support a viable release scope, sufficient audience urgency, or adequate international potential. Verdict and metrics must be strategically aligned based on distribution-overhead return."""
+
+
 VOTE_SCHEMA = {
     "type": "object",
     "properties": {
@@ -195,6 +224,8 @@ def _mock_vote(role: str, film_payload: dict) -> dict:
         return _mock_creative_vote(film_payload)
     if role == "marketing":
         return _mock_marketing_vote(film_payload)
+    if role == "distribution":
+        return _mock_distribution_vote(film_payload)
 
     title = film_payload.get("title", "this film")
     seed = int(hashlib.sha256(f"{role}:{title}".encode()).hexdigest(), 16)
@@ -341,6 +372,45 @@ def _mock_finance_vote(film_payload: dict) -> dict:
     return {"role": "finance", "vote": vote, "confidence": 40 + (seed % 55), "argument": argument}
 
 
+# In-voice mock lines for distribution -- Harvey Specter courtroom swagger
+# crossed with Lucille Bluth's patrician detachment, plus the persona's
+# signature delusion that a banana costs ten dollars.
+_DISTRIBUTION_MOCK_TEMPLATES = [
+    "{title} walks into the room already knowing it's going to win -- I "
+    "don't do underdog stories, I do closers. The rollout writes itself, "
+    "the same way a ten-dollar banana writes its own grocery receipt.",
+    "Let's not pretend {title} needs my sympathy. It needs a release "
+    "calendar with no soft spots and a legal team that reads the fine "
+    "print before the theater owners do -- which, frankly, is my whole job.",
+    "I've seen theater owners cry over less than {title}'s platform "
+    "strategy. Good. Let them. I'm not in the business of comforting "
+    "people who charge ten dollars for a banana and call it a snack bar.",
+]
+
+_DISTRIBUTION_MOCK_VERDICTS = {
+    "greenlight": "Wide release, full confidence -- I don't hedge, I close.",
+    "pass": "Pass. I don't put my name on a platform strategy I can't defend in front of the board.",
+}
+
+
+def _mock_distribution_vote(film_payload: dict) -> dict:
+    title = film_payload.get("title", "this film")
+    seed = int(hashlib.sha256(f"distribution:{title}".encode()).hexdigest(), 16)
+    vote = "greenlight" if seed % 2 == 0 else "pass"
+    template = _DISTRIBUTION_MOCK_TEMPLATES[seed % len(_DISTRIBUTION_MOCK_TEMPLATES)]
+    scope = "Wide" if (seed // 3) % 2 == 0 else "Limited"
+    country_count = (10 if scope == "Wide" else 1) + (seed % 40)
+    argument = (
+        f"{template.format(title=title)} "
+        f"{_DISTRIBUTION_MOCK_VERDICTS[vote]} "
+        f"[Predicted Release Scope: {scope}]\n"
+        f"[Predicted Country Count: {country_count}]\n\n"
+        "[MOCK -- no ANTHROPIC_API_KEY set. Set one in .env.local for "
+        "real Claude-generated arguments.]"
+    )
+    return {"role": "distribution", "vote": vote, "confidence": 40 + (seed % 55), "argument": argument}
+
+
 def _system_prompt_for(role: str) -> str:
     if role == "creative":
         base = CREATIVE_SYSTEM_PROMPT
@@ -348,6 +418,8 @@ def _system_prompt_for(role: str) -> str:
         base = FINANCE_SYSTEM_PROMPT
     elif role == "marketing":
         base = MARKETING_SYSTEM_PROMPT
+    elif role == "distribution":
+        base = DISTRIBUTION_SYSTEM_PROMPT
     else:
         framing = ROLE_FRAMING[role]
         base = (
