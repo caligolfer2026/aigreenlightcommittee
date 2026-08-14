@@ -9,7 +9,8 @@ when no ANTHROPIC_API_KEY is set, same as everything else in this package.
 import json
 from typing import Optional
 
-from .calibration import compute_calibration
+from .aggregation import aggregate_votes
+from .calibration import compute_calibration, score_to_grade
 from .llm import call_structured, has_api_key
 
 RATIONALE_SCHEMA = {
@@ -76,3 +77,58 @@ def run_scoring(
         rationale = result["rationale"]
 
     return {"grade": computed["grade"], "rationale": rationale}
+
+
+# ---------------------------------------------------------------------------
+# Pitch scoring: a hypothetical pitch (synthetic negative tmdb_id, no real
+# release) has no actual results to reveal. Per spec, the fifth agent grades
+# it purely on the four committee members' own votes/confidence/reasoning --
+# aggregate_votes() is the deterministic backbone here instead of
+# compute_calibration(), and the grade comes from mapping its
+# confidenceWeightedScore onto the same A-F scale via score_to_grade().
+PITCH_SYSTEM_PROMPT = """You are the Scoring agent in a studio greenlight committee simulation.
+This film is a hypothetical pitch, not a real release -- there is no box
+office or audience data to reveal. Your only job is to write a short,
+objective rationale (2-4 sentences) explaining whether the committee's own
+votes and reasoning add up to a defensible greenlight call. You are given
+an already-computed outcome and grade -- do not change them and do not
+invent facts beyond what's provided. Reference specific agents' arguments
+where it's illuminating, and note any real disagreement between roles."""
+
+
+def _pitch_fallback_rationale(title: str, decision: dict, grade: str) -> str:
+    vote_line = (
+        f'The committee voted {decision["greenlightCount"]}-{decision["passCount"]} '
+        f'(outcome: {decision["outcome"]}) on "{title}", a hypothetical pitch with no '
+        "real outcome to reveal."
+    )
+    confidence_line = (
+        f'Confidence-weighted score: {decision["confidenceWeightedScore"]}/100 '
+        f'(avg confidence {decision["averageConfidence"]}%).'
+    )
+    grade_line = f"Grade: {grade}."
+    return " ".join([vote_line, confidence_line, grade_line])
+
+
+def run_pitch_scoring(title: str, votes: list[dict]) -> dict:
+    """Grade a hypothetical pitch's committee votes -- no real outcome data
+    exists to compare against, so the grade is derived from how strongly and
+    consistently the four members backed the pitch (see aggregate_votes)."""
+    decision = aggregate_votes(votes)
+    grade = score_to_grade(int(decision["confidenceWeightedScore"]))
+
+    if not has_api_key():
+        rationale = _pitch_fallback_rationale(title, decision, grade)
+    else:
+        user_content = json.dumps(
+            {
+                "film": title,
+                "committeeVotes": votes,
+                "aggregatedDecision": decision,
+                "grade": grade,
+            }
+        )
+        result = call_structured(PITCH_SYSTEM_PROMPT, user_content, RATIONALE_SCHEMA)
+        rationale = result["rationale"]
+
+    return {"grade": grade, "outcome": decision["outcome"], "rationale": rationale}

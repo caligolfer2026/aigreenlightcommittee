@@ -25,7 +25,7 @@ from fastapi.staticfiles import StaticFiles
 from committee.aggregation import aggregate_votes
 from committee.agents import run_agent
 from committee.pitch import parse_pitch
-from committee.scoring import run_scoring
+from committee.scoring import run_pitch_scoring, run_scoring
 from db.env import load_env_file
 from db.prerelease import create_session, get_slate, get_votes, record_vote, upsert_film
 from db.results import get_actual_results, get_scores, record_score, upsert_actual_results
@@ -190,11 +190,25 @@ def score_run(session_id: int, tmdb_id: int, slate: str = "default"):
     if not votes:
         raise HTTPException(status_code=400, detail="No votes recorded for this film yet")
 
+    title = votes[0]["title"]
+
+    # Synthetic pitches (negative tmdb_id -- see /api/slate/add-pitch) have
+    # no real outcome to reveal, so they're graded on the committee's own
+    # votes instead of falling into the "no actual results" 404 below.
+    if tmdb_id < 0:
+        result = run_pitch_scoring(title, votes)
+        record_score(
+            session_id=session_id,
+            tmdb_id=tmdb_id,
+            grade=result["grade"],
+            rationale=result["rationale"],
+        )
+        return result
+
     actual = get_actual_results(tmdb_id)
     if actual is None:
         raise HTTPException(status_code=404, detail="No actual results loaded for this film yet")
 
-    title = votes[0]["title"]
     budget = None
     for film in get_slate(slate=slate):
         if film["tmdb_id"] == tmdb_id:
