@@ -175,6 +175,21 @@ body {
 }
 .intro-skip:hover { color: var(--text); border-color: var(--gold-dim); }
 
+.intro-sound {
+  position: absolute;
+  bottom: 2rem;
+  left: 2rem;
+  background: transparent;
+  border: 1px solid var(--gold-dim);
+  color: var(--gold);
+  border-radius: 8px;
+  padding: 0.5rem 1rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.intro-sound.hidden { display: none; }
+.intro-sound:hover { background: rgba(232, 195, 74, 0.1); }
+
 .wrap {
   max-width: 720px;
   margin: 0 auto;

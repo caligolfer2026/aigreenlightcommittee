@@ -299,9 +299,15 @@ function escapeHtml(str) {
 const INTRO_TOTAL_MS = 9600; // last line's delay + its own hold/fade duration
 const introOverlay = document.getElementById("intro-overlay");
 const introSkipBtn = document.getElementById("intro-skip-btn");
+const introAudio = document.getElementById("intro-audio");
+const introSoundBtn = document.getElementById("intro-sound-btn");
 
 function dismissIntro() {
   if (!introOverlay) return;
+  if (introAudio) {
+    introAudio.pause();
+    introAudio.currentTime = 0;
+  }
   introOverlay.classList.add("intro-hidden");
   setTimeout(() => introOverlay.remove(), 1200);
 }
@@ -311,6 +317,20 @@ if (introOverlay) {
     introOverlay.remove();
   } else {
     sessionStorage.setItem("introShown", "1");
+
+    // Most browsers block audio autoplay before any user interaction --
+    // try to play, and if it's blocked, surface a manual "Play with sound"
+    // button instead of silently failing. The visual sequence runs either way.
+    if (introAudio) {
+      introAudio.play().catch(() => {
+        introSoundBtn.classList.remove("hidden");
+      });
+      introSoundBtn.addEventListener("click", () => {
+        introAudio.play();
+        introSoundBtn.classList.add("hidden");
+      });
+    }
+
     const introTimer = setTimeout(dismissIntro, INTRO_TOTAL_MS);
     introSkipBtn.addEventListener("click", () => {
       clearTimeout(introTimer);
