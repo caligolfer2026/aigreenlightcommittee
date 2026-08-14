@@ -2,7 +2,9 @@ const ROLES = ["creative", "finance", "marketing", "distribution"];
 const ROLE_LABEL = { creative: "CR", finance: "FI", marketing: "MK", distribution: "DI" };
 
 const state = {
-  slateName: "default",
+  // Unique per page load so pitches never land in a shared/leftover slate
+  // from a previous session -- every visit starts from an empty slate.
+  slateName: `pitch-${Date.now()}`,
   films: [],
   sessionId: null,
   filmIndex: 0,
@@ -18,8 +20,6 @@ const screens = {
 
 const MAX_FILMS = 5;
 
-const slateNameInput = document.getElementById("slate-name-input");
-const loadSlateBtn = document.getElementById("load-slate-btn");
 const slateList = document.getElementById("slate-list");
 const slateCount = document.getElementById("slate-count");
 const conveneBtn = document.getElementById("convene-btn");
@@ -46,13 +46,6 @@ function showScreen(name) {
 }
 
 // ---------- Landing ----------
-async function loadSlate() {
-  state.slateName = slateNameInput.value.trim() || "default";
-  const resp = await fetch(`/api/slate?slate=${encodeURIComponent(state.slateName)}`);
-  state.films = resp.ok ? await resp.json() : [];
-  renderSlate();
-}
-
 function genreHistorySummary(film) {
   const payload = film.payload || {};
   const genre = (payload.genres && payload.genres[0]) || null;
@@ -82,7 +75,7 @@ function renderSlate() {
   slateCount.textContent = `Your slate · ${state.films.length}/${MAX_FILMS} films`;
   slateList.innerHTML = "";
   if (state.films.length === 0) {
-    slateList.innerHTML = `<div class="slate-empty">No films yet. Add one below, or load an existing slate by name.</div>`;
+    slateList.innerHTML = `<div class="slate-empty">No films yet. Pitch one below to get started.</div>`;
   } else {
     state.films.forEach((film, i) => {
       const row = document.createElement("div");
@@ -109,8 +102,6 @@ function renderSlate() {
     });
   });
 }
-
-loadSlateBtn.addEventListener("click", loadSlate);
 
 addPitchBtn.addEventListener("click", addPitch);
 pitchInput.addEventListener("keydown", (e) => {
@@ -305,4 +296,4 @@ function escapeHtml(str) {
 }
 
 // ---------- Init ----------
-loadSlate();
+renderSlate();
