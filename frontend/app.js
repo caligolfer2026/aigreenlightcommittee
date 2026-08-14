@@ -1,105 +1,262 @@
 const ROLES = ["creative", "finance", "marketing", "distribution"];
+const ROLE_LABEL = { creative: "CR", finance: "FI", marketing: "MK", distribution: "DI" };
 
-let currentSessionId = null;
-let films = [];
-let pollHandle = null;
+const state = {
+  slateName: "default",
+  films: [],
+  sessionId: null,
+  filmIndex: 0,
+  votesByFilm: {}, // tmdb_id -> {role: voteObj}
+};
 
-const filmsEl = document.getElementById("films");
-const sessionLabelEl = document.getElementById("session-label");
-const slateInput = document.getElementById("slate-input");
-const startBtn = document.getElementById("start-btn");
+// ---------- DOM refs ----------
+const screens = {
+  landing: document.getElementById("screen-landing"),
+  deliberation: document.getElementById("screen-deliberation"),
+  verdict: document.getElementById("screen-verdict"),
+};
 
-startBtn.addEventListener("click", startSession);
+const MAX_FILMS = 5;
 
-async function startSession() {
-  const slate = slateInput.value.trim() || "default";
+const slateNameInput = document.getElementById("slate-name-input");
+const loadSlateBtn = document.getElementById("load-slate-btn");
+const slateList = document.getElementById("slate-list");
+const slateCount = document.getElementById("slate-count");
+const conveneBtn = document.getElementById("convene-btn");
+const filmTitleInput = document.getElementById("film-title-input");
+const addFilmBtn = document.getElementById("add-film-btn");
+const addFilmStatus = document.getElementById("add-film-status");
 
-  const slateResp = await fetch(`/api/slate?slate=${encodeURIComponent(slate)}`);
-  films = await slateResp.json();
+const delibFilmCount = document.getElementById("delib-film-count");
+const delibFilmTitle = document.getElementById("delib-film-title");
+const delibFilmMeta = document.getElementById("delib-film-meta");
+const delibTally = document.getElementById("delib-tally");
+const agentCardsEl = document.getElementById("agent-cards");
+const nextFilmBtn = document.getElementById("next-film-btn");
 
-  const sessionResp = await fetch(`/api/session?slate=${encodeURIComponent(slate)}`, {
-    method: "POST",
+const verdictCardsEl = document.getElementById("verdict-cards");
+const restartBtn = document.getElementById("restart-btn");
+
+// ---------- Screen switching ----------
+function showScreen(name) {
+  for (const [key, el] of Object.entries(screens)) {
+    el.classList.toggle("hidden", key !== name);
+  }
+}
+
+// ---------- Landing ----------
+async function loadSlate() {
+  state.slateName = slateNameInput.value.trim() || "default";
+  const resp = await fetch(`/api/slate?slate=${encodeURIComponent(state.slateName)}`);
+  state.films = resp.ok ? await resp.json() : [];
+  renderSlate();
+}
+
+function renderSlate() {
+  slateCount.textContent = `Your slate · ${state.films.length}/${MAX_FILMS} films`;
+  slateList.innerHTML = "";
+  if (state.films.length === 0) {
+    slateList.innerHTML = `<div class="slate-empty">No films yet. Add one below, or load an existing slate by name.</div>`;
+  } else {
+    state.films.forEach((film, i) => {
+      const row = document.createElement("div");
+      row.className = "slate-item";
+      row.innerHTML = `
+        <span class="idx mono">${String(i + 1).padStart(2, "0")}</span>
+        <span class="title">${escapeHtml(film.title)}</span>
+        <button class="remove-btn" data-tmdb-id="${film.tmdb_id}" title="Remove from slate">&times;</button>
+      `;
+      slateList.appendChild(row);
+    });
+  }
+  conveneBtn.disabled = state.films.length === 0;
+  addFilmBtn.disabled = state.films.length >= MAX_FILMS;
+
+  slateList.querySelectorAll(".remove-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const tmdbId = Number(btn.dataset.tmdbId);
+      state.films = state.films.filter((f) => f.tmdb_id !== tmdbId);
+      renderSlate();
+    });
   });
-  const { session_id } = await sessionResp.json();
-  currentSessionId = session_id;
-  sessionLabelEl.textContent = `Session ${session_id} · slate: ${slate} · ${films.length} film(s)`;
-
-  render({}, {});
-  if (pollHandle) clearInterval(pollHandle);
-  pollHandle = setInterval(poll, 3000);
-  poll();
 }
 
-async function poll() {
-  if (!currentSessionId) return;
+loadSlateBtn.addEventListener("click", loadSlate);
 
-  const [votesResp, scoresResp] = await Promise.all([
-    fetch(`/api/session/${currentSessionId}/votes`),
-    fetch(`/api/session/${currentSessionId}/scores`),
-  ]);
-  const votes = await votesResp.json();
-  const scores = await scoresResp.json();
+addFilmBtn.addEventListener("click", addFilm);
+filmTitleInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") addFilm();
+});
 
-  const votesByTmdbId = {};
-  for (const v of votes) {
-    (votesByTmdbId[v.tmdb_id] ??= []).push(v);
+async function addFilm() {
+  const title = filmTitleInput.value.trim();
+  if (!title) return;
+  if (state.films.length >= MAX_FILMS) {
+    addFilmStatus.textContent = `Slate is full (max ${MAX_FILMS} films).`;
+    addFilmStatus.className = "add-film-status error";
+    return;
   }
-  const scoresByTmdbId = {};
-  for (const s of scores) {
-    scoresByTmdbId[s.tmdb_id] = s;
+  if (state.films.some((f) => f.title.toLowerCase() === title.toLowerCase())) {
+    addFilmStatus.textContent = "Already in your slate.";
+    addFilmStatus.className = "add-film-status error";
+    return;
   }
 
-  render(votesByTmdbId, scoresByTmdbId);
+  addFilmBtn.disabled = true;
+  addFilmStatus.textContent = `Looking up "${title}"...`;
+  addFilmStatus.className = "add-film-status";
+
+  try {
+    const resp = await fetch(
+      `/api/slate/add-film?title=${encodeURIComponent(title)}&slate=${encodeURIComponent(state.slateName)}`,
+      { method: "POST" }
+    );
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.detail || `Request failed (${resp.status})`);
+    }
+    const film = await resp.json();
+    state.films.push(film);
+    filmTitleInput.value = "";
+    addFilmStatus.textContent = "";
+    renderSlate();
+  } catch (e) {
+    addFilmStatus.textContent = e.message;
+    addFilmStatus.className = "add-film-status error";
+  } finally {
+    addFilmBtn.disabled = state.films.length >= MAX_FILMS;
+  }
 }
 
-function render(votesByTmdbId, scoresByTmdbId) {
-  filmsEl.innerHTML = "";
-  for (const film of films) {
+conveneBtn.addEventListener("click", async () => {
+  const resp = await fetch(`/api/session?slate=${encodeURIComponent(state.slateName)}`, { method: "POST" });
+  const { session_id } = await resp.json();
+  state.sessionId = session_id;
+  state.filmIndex = 0;
+  state.votesByFilm = {};
+  showScreen("deliberation");
+  runFilm(state.filmIndex);
+});
+
+// ---------- Deliberation ----------
+async function runFilm(index) {
+  const film = state.films[index];
+  delibFilmCount.textContent = `Film ${index + 1} of ${state.films.length}`;
+  delibFilmTitle.textContent = film.title;
+  delibFilmMeta.textContent = film.release_date || "release date unknown";
+  nextFilmBtn.disabled = true;
+  nextFilmBtn.textContent = index === state.films.length - 1 ? "See the Verdict" : "Next Film";
+
+  state.votesByFilm[film.tmdb_id] = {};
+  updateTally(film);
+
+  agentCardsEl.innerHTML = "";
+  const cardEls = {};
+  for (const role of ROLES) {
     const card = document.createElement("div");
-    card.className = "film-card";
-
-    const votes = votesByTmdbId[film.tmdb_id] || [];
-    const votesByRole = {};
-    for (const v of votes) votesByRole[v.role] = v;
-
-    const score = scoresByTmdbId[film.tmdb_id];
-
+    card.className = "agent-card";
     card.innerHTML = `
-      <h2>${escapeHtml(film.title)}</h2>
-      <div class="meta">${film.release_date || "release date unknown"}</div>
-      <div class="votes">
-        ${ROLES.map((role) => renderVote(role, votesByRole[role])).join("")}
+      <div class="badge role-${role}">${ROLE_LABEL[role]}</div>
+      <div class="body">
+        <div class="role-name">${role}</div>
+        <div class="reviewing">Reviewing pre-release data<span class="dots"></span></div>
       </div>
-      ${score ? renderScore(score) : ""}
     `;
-    filmsEl.appendChild(card);
+    agentCardsEl.appendChild(card);
+    cardEls[role] = card;
   }
+
+  await Promise.all(
+    ROLES.map(async (role) => {
+      const resp = await fetch(
+        `/api/session/${state.sessionId}/agent-run?film_id=${film.id}&role=${role}&slate=${encodeURIComponent(state.slateName)}`,
+        { method: "POST" }
+      );
+      const vote = await resp.json();
+      state.votesByFilm[film.tmdb_id][role] = vote;
+      renderAgentCard(cardEls[role], role, vote);
+      updateTally(film);
+    })
+  );
+
+  nextFilmBtn.disabled = false;
 }
 
-function renderVote(role, vote) {
-  if (!vote) {
-    return `<div class="vote"><div class="role">${role}</div><div class="pending">waiting…</div></div>`;
-  }
-  return `
-    <div class="vote">
-      <div class="role">${role}</div>
-      <div class="call ${vote.vote}">${vote.vote.toUpperCase()}</div>
-      <div class="argument">${escapeHtml(vote.argument)}</div>
+function renderAgentCard(cardEl, role, vote) {
+  cardEl.innerHTML = `
+    <div class="badge role-${role}">${ROLE_LABEL[role]}</div>
+    <div class="body">
+      <div class="role-name">
+        ${role}
+        <span class="vote-badge ${vote.vote}">${vote.vote.toUpperCase()}</span>
+      </div>
+      <div class="argument-text">${escapeHtml(vote.argument)}</div>
     </div>
   `;
 }
 
-function renderScore(score) {
-  return `
-    <div class="score">
-      <span class="grade">Grade: ${escapeHtml(String(score.grade))}</span>
-      <div class="argument">${escapeHtml(score.rationale)}</div>
-    </div>
-  `;
+function updateTally(film) {
+  const votes = Object.values(state.votesByFilm[film.tmdb_id] || {});
+  const green = votes.filter((v) => v.vote === "greenlight").length;
+  const pass = votes.filter((v) => v.vote === "pass").length;
+  delibTally.textContent = `${green} greenlight · ${pass} pass · ${4 - votes.length} pending`;
 }
+
+nextFilmBtn.addEventListener("click", () => {
+  if (state.filmIndex < state.films.length - 1) {
+    state.filmIndex += 1;
+    runFilm(state.filmIndex);
+  } else {
+    showScreen("verdict");
+    runVerdict();
+  }
+});
+
+// ---------- Verdict ----------
+async function runVerdict() {
+  verdictCardsEl.innerHTML = "";
+  for (const film of state.films) {
+    const card = document.createElement("div");
+    card.className = "verdict-card";
+    card.innerHTML = `<h3>${escapeHtml(film.title)}</h3><div class="reviewing">Revealing actual results<span class="dots"></span></div>`;
+    verdictCardsEl.appendChild(card);
+
+    try {
+      const resp = await fetch(`/api/session/${state.sessionId}/score-run?tmdb_id=${film.tmdb_id}`, {
+        method: "POST",
+      });
+      if (!resp.ok) throw new Error(await resp.text());
+      const score = await resp.json();
+
+      const votes = Object.values(state.votesByFilm[film.tmdb_id] || {});
+      const chips = votes
+        .map((v) => `<span class="chip">${v.role}: ${v.vote}</span>`)
+        .join("");
+
+      card.innerHTML = `
+        <h3>${escapeHtml(film.title)}</h3>
+        <div class="verdict-grade">Grade: ${escapeHtml(String(score.grade))}</div>
+        <div class="verdict-rationale">${escapeHtml(score.rationale)}</div>
+        <div class="verdict-tally">${chips}</div>
+      `;
+    } catch (e) {
+      card.innerHTML = `<h3>${escapeHtml(film.title)}</h3><div class="reviewing">No actual results loaded for this film yet.</div>`;
+    }
+  }
+}
+
+restartBtn.addEventListener("click", () => {
+  state.sessionId = null;
+  state.filmIndex = 0;
+  state.votesByFilm = {};
+  showScreen("landing");
+});
 
 function escapeHtml(str) {
   const div = document.createElement("div");
   div.textContent = str;
   return div.innerHTML;
 }
+
+// ---------- Init ----------
+loadSlate();

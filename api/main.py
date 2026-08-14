@@ -11,23 +11,71 @@ Run from the repo root:
     pip install -r api/requirements.txt
     uvicorn api.main:app --reload
 """
+import os
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO_ROOT))
+sys.path.insert(0, str(REPO_ROOT / "data-pipeline"))
 
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 
-from db.prerelease import create_session, get_slate, get_votes
-from db.results import get_actual_results, get_scores
+from committee.agents import run_agent
+from committee.scoring import run_scoring
+from db.env import load_env_file
+from db.prerelease import create_session, get_slate, get_votes, record_vote, upsert_film
+from db.results import get_actual_results, get_scores, record_score, upsert_actual_results
+from src.pipeline import fetch_film, find_movie
 
 app = FastAPI(title="AI Greenlight Committee")
+
+
+def _find_film(slate_name: str, film_id: int) -> dict:
+    for film in get_slate(slate=slate_name):
+        if film["id"] == film_id:
+            return film
+    raise HTTPException(status_code=404, detail=f"Film {film_id} not in slate {slate_name!r}")
 
 
 @app.get("/api/slate")
 def slate(slate: str = "default"):
     return get_slate(slate=slate)
+
+
+@app.post("/api/slate/add-film")
+def add_film(title: str, slate: str = "default"):
+    """Fetch a film by title from TMDB/OMDb (live) and load it into both
+    databases under the given slate, same as data-pipeline/load_slate.py."""
+    load_env_file(".env.local")
+    tmdb_key = os.environ.get("TMDB_API_KEY")
+    omdb_key = os.environ.get("OMDB_API_KEY")
+    if not tmdb_key or not omdb_key:
+        raise HTTPException(status_code=500, detail="TMDB_API_KEY / OMDB_API_KEY not set in .env.local")
+
+    match = find_movie(title, tmdb_key)
+    if not match:
+        raise HTTPException(status_code=404, detail=f"No TMDB match found for {title!r}")
+
+    pre_release, actual_results = fetch_film(title, tmdb_key, omdb_key)
+
+    film_id = upsert_film(
+        tmdb_id=match["id"],
+        title=pre_release["title"],
+        release_date=pre_release["releaseDate"],
+        payload=pre_release,
+        slate=slate,
+    )
+    upsert_actual_results(tmdb_id=match["id"], title=pre_release["title"], payload=actual_results)
+
+    return {
+        "id": film_id,
+        "tmdb_id": match["id"],
+        "title": pre_release["title"],
+        "release_date": pre_release["releaseDate"],
+        "payload": pre_release,
+    }
 
 
 @app.post("/api/session")
@@ -44,6 +92,44 @@ def session_votes(session_id: int):
 @app.get("/api/session/{session_id}/scores")
 def session_scores(session_id: int):
     return get_scores(session_id)
+
+
+@app.post("/api/session/{session_id}/agent-run")
+def agent_run(session_id: int, film_id: int, role: str, slate: str = "default"):
+    """Actually run one committee agent (real Claude call, or a free mock
+    response if ANTHROPIC_API_KEY isn't set) and record its vote."""
+    film = _find_film(slate, film_id)
+    result = run_agent(role, film["payload"])
+    record_vote(
+        session_id=session_id,
+        film_id=film_id,
+        role=result["role"],
+        vote=result["vote"],
+        argument=result["argument"],
+    )
+    return result
+
+
+@app.post("/api/session/{session_id}/score-run")
+def score_run(session_id: int, tmdb_id: int):
+    """Actually run the scoring agent (real Claude call, or a free mock
+    response) for one film and record its grade."""
+    votes = [v for v in get_votes(session_id) if v["tmdb_id"] == tmdb_id]
+    if not votes:
+        raise HTTPException(status_code=400, detail="No votes recorded for this film yet")
+
+    actual = get_actual_results(tmdb_id)
+    if actual is None:
+        raise HTTPException(status_code=404, detail="No actual results loaded for this film yet")
+
+    result = run_scoring(votes, actual["payload"])
+    record_score(
+        session_id=session_id,
+        tmdb_id=tmdb_id,
+        grade=result["grade"],
+        rationale=result["rationale"],
+    )
+    return result
 
 
 @app.get("/api/results/{tmdb_id}")

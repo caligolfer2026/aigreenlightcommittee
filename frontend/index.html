@@ -3,20 +3,89 @@
 <head>
 <meta charset="utf-8">
 <title>AI Greenlight Committee</title>
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=3">
 </head>
 <body>
-  <header>
-    <h1>AI Greenlight Committee</h1>
-    <div class="controls">
-      <label>Slate: <input id="slate-input" value="default"></label>
-      <button id="start-btn">Start Session</button>
-      <span id="session-label"></span>
+
+  <!-- ===== LANDING ===== -->
+  <section id="screen-landing" class="screen">
+    <div class="wrap">
+      <div class="eyebrow">Pre-release only &middot; No post-release data exposed</div>
+      <div class="brand">AI Greenlight Committee</div>
+
+      <div class="hero">
+        <div class="eyebrow center">Pre-release committee &middot; Four agents &middot; One verdict</div>
+        <h1 class="headline">The Greenlight<br><span class="muted">Committee</span></h1>
+        <p class="lede">
+          Four agents &mdash; creative, finance, marketing, distribution &mdash; argue
+          over a slate of films using only pre-release data. They vote. Then a
+          fifth agent reveals the actual box office and scores the committee.
+        </p>
+      </div>
+
+      <div class="slate-panel">
+        <div class="eyebrow" id="slate-count">Your slate</div>
+        <div id="slate-list" class="slate-list"></div>
+
+        <div class="slate-input-row">
+          <label for="slate-name-input" class="visually-hidden">Slate name</label>
+          <input id="slate-name-input" placeholder="Slate name (e.g. default)" value="default">
+          <button id="load-slate-btn" class="btn-ghost">Load</button>
+        </div>
+
+        <div class="slate-input-row">
+          <label for="film-title-input" class="visually-hidden">Add film title</label>
+          <input id="film-title-input" placeholder="Add film title...">
+          <button id="add-film-btn" class="btn-ghost">+</button>
+        </div>
+        <div id="add-film-status" class="add-film-status"></div>
+
+        <button id="convene-btn" class="btn-gold" disabled>Convene the Committee</button>
+
+        <div class="roles-row">
+          <div class="role-badge role-creative"><span>CR</span></div>
+          <div class="role-badge role-finance"><span>FI</span></div>
+          <div class="role-badge role-marketing"><span>MK</span></div>
+          <div class="role-badge role-distribution"><span>DI</span></div>
+          <div class="role-badge role-fifth"><span>V5</span></div>
+        </div>
+        <div class="roles-label">Creative &middot; Finance &middot; Marketing &middot; Distribution &middot; Fifth Agent</div>
+      </div>
+
+      <div class="footer-note">AI Greenlight &middot; Pre-release data only &middot; no post-release fields exposed to the committee</div>
     </div>
-  </header>
+  </section>
 
-  <main id="films"></main>
+  <!-- ===== DELIBERATION ===== -->
+  <section id="screen-deliberation" class="screen hidden">
+    <div class="wrap">
+      <div class="delib-header">
+        <div>
+          <div class="eyebrow" id="delib-film-count">Film 1 of 1</div>
+          <h2 id="delib-film-title" class="film-title"></h2>
+          <div class="film-meta" id="delib-film-meta"></div>
+        </div>
+        <div class="tally" id="delib-tally"></div>
+      </div>
 
-  <script src="app.js"></script>
+      <div id="agent-cards" class="agent-cards"></div>
+
+      <div class="delib-footer">
+        <button id="next-film-btn" class="btn-gold" disabled>Next Film</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== VERDICT ===== -->
+  <section id="screen-verdict" class="screen hidden">
+    <div class="wrap">
+      <div class="eyebrow center">Fifth agent verdict</div>
+      <h1 class="headline center">The Reveal</h1>
+      <div id="verdict-cards" class="verdict-cards"></div>
+      <button id="restart-btn" class="btn-ghost" style="margin-top: 2rem;">Start a new session</button>
+    </div>
+  </section>
+
+  <script src="app.js?v=3"></script>
 </body>
 </html>
