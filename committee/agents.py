@@ -8,6 +8,7 @@ import hashlib
 import json
 
 from .llm import call_structured, has_api_key
+from marketing import evaluate_marketing
 
 ROLE_FRAMING = {
     "finance": (
@@ -97,6 +98,9 @@ def _system_prompt_for(role: str) -> str:
 
 def run_agent(role: str, film_payload: dict) -> dict:
     """Generate one agent's argument + vote for a film's pre-release payload."""
+    if role == "marketing":
+        return evaluate_marketing(film_payload)
+
     if not has_api_key():
         return _mock_vote(role, film_payload)
 
