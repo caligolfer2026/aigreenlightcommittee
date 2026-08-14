@@ -5,6 +5,7 @@ nothing to look up by title. Genre, logline, and (if named) a comp film
 are extracted from the text; data-pipeline/src/pipeline.py's
 build_pitch_payload then fetches real historical data for that genre.
 """
+import hashlib
 import json
 import re
 import sys
@@ -82,15 +83,75 @@ def _detect_reference_title(text: str) -> "str | None":
     return match.group(1).strip().rstrip(".,!?")
 
 
+# An explicit title beats everything else -- "called X" / "titled X" /
+# "named X", or a quoted phrase anywhere in the pitch.
+_TITLE_NAMED_RE = re.compile(
+    r"\b(?:called|titled|named)\s+[\"“]?([A-Z][\w:'\-]*(?:\s+[A-Z0-9][\w:'\-]*)*)",
+    re.IGNORECASE,
+)
+_TITLE_QUOTED_RE = re.compile(r"[\"“]([^\"”]{2,60})[\"”]")
+
+
+def _detect_explicit_title(text: str) -> "str | None":
+    match = _TITLE_NAMED_RE.search(text)
+    if match:
+        return match.group(1).strip().rstrip(".,!?\"”")
+    match = _TITLE_QUOTED_RE.search(text)
+    if match:
+        return match.group(1).strip()
+    return None
+
+
+# Deterministic working-title generator for when the pitch doesn't name one
+# itself -- picks an adjective + a genre-flavored noun, hash-seeded on the
+# pitch text so the same pitch always gets the same title. Much more
+# film-like than a literal "Untitled X Pitch" placeholder, and it keeps the
+# mock agent arguments (which interpolate {title}) from reading as fake.
+_TITLE_ADJECTIVES = [
+    "Midnight", "Hollow", "Silent", "Last", "Broken", "Crimson", "Shattered",
+    "Distant", "Final", "Wild", "Golden", "Restless", "Quiet", "Long",
+]
+
+_TITLE_NOUNS_BY_GENRE = {
+    "Horror": ["House", "Hour", "Chapel", "Woods", "Bloodline", "Hollow"],
+    "Action": ["Protocol", "Directive", "Strike", "Legacy", "Reckoning"],
+    "Comedy": ["Disaster", "Wedding", "Plan", "Reunion", "Getaway"],
+    "Science Fiction": ["Signal", "Horizon", "Genesis", "Frequency", "Descent"],
+    "Romance": ["Letter", "Summer", "Promise", "Season", "Reunion"],
+    "Thriller": ["Contract", "Silence", "Trigger", "Witness", "Exchange"],
+    "Drama": ["Reckoning", "Inheritance", "Reunion", "Harvest", "Departure"],
+    "Crime": ["Heist", "Ledger", "Alibi", "Syndicate"],
+    "Mystery": ["Cipher", "Vanishing", "Inquiry"],
+    "Fantasy": ["Kingdom", "Prophecy", "Realm"],
+    "Adventure": ["Expedition", "Passage", "Frontier"],
+    "Animation": ["Kingdom", "Voyage", "Wonder"],
+    "Family": ["Adventure", "Summer", "Reunion"],
+    "War": ["Front", "Siege", "Company"],
+    "History": ["Reckoning", "Empire", "Reign"],
+    "Music": ["Encore", "Refrain", "Chorus"],
+}
+
+_DEFAULT_TITLE_NOUNS = ["Project", "Story", "Reckoning"]
+
+
+def _generate_title(pitch_text: str, genre: "str | None") -> str:
+    seed = int(hashlib.sha256(pitch_text.encode()).hexdigest(), 16)
+    nouns = _TITLE_NOUNS_BY_GENRE.get(genre, _DEFAULT_TITLE_NOUNS)
+    adjective = _TITLE_ADJECTIVES[seed % len(_TITLE_ADJECTIVES)]
+    noun = nouns[(seed // 7) % len(nouns)]
+    return f"{adjective} {noun}"
+
+
 def _mock_parse(pitch_text: str) -> dict:
-    """No ANTHROPIC_API_KEY -- heuristic genre/reference-title extraction
-    instead of an LLM call, so pitch intake still works for free. Less
-    precise than the real thing, but deterministic and good enough to
-    exercise the rest of the pipeline."""
+    """No ANTHROPIC_API_KEY -- heuristic genre/title/reference-title
+    extraction instead of an LLM call, so pitch intake still works for
+    free. Less precise than the real thing, but deterministic and good
+    enough to exercise the rest of the pipeline."""
     genre = _detect_genre(pitch_text)
     reference_title = _detect_reference_title(pitch_text)
+    title = _detect_explicit_title(pitch_text) or _generate_title(pitch_text, genre)
     return {
-        "title": f"Untitled {genre or 'Film'} Pitch",
+        "title": title,
         "genre": genre,
         "logline": pitch_text.strip(),
         "marketingHook": None,
