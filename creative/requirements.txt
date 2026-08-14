@@ -1,0 +1,7 @@
+# The creative agent calls Claude. The shared db layer has its own deps --
+# install both:
+#     pip install -r db/requirements.txt -r creative/requirements.txt
+#
+# 0.122 is the first version verified to accept `fallbacks` and `output_config`
+# on the beta messages endpoint, which agent.py uses.
+anthropic>=0.122
