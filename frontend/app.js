@@ -296,7 +296,7 @@ function escapeHtml(str) {
 }
 
 // ---------- Intro ----------
-const INTRO_TOTAL_MS = 9600; // last line's delay + its own hold/fade duration
+const INTRO_TOTAL_MS = 16200; // title's delay + duration, plus a beat to hold on it
 const introOverlay = document.getElementById("intro-overlay");
 const introSkipBtn = document.getElementById("intro-skip-btn");
 const introAudio = document.getElementById("intro-audio");
