@@ -300,7 +300,6 @@ const INTRO_TOTAL_MS = 9600; // last line's delay + its own hold/fade duration
 const introOverlay = document.getElementById("intro-overlay");
 const introSkipBtn = document.getElementById("intro-skip-btn");
 const introAudio = document.getElementById("intro-audio");
-const introSoundBtn = document.getElementById("intro-sound-btn");
 
 function dismissIntro() {
   if (!introOverlay) return;
@@ -318,16 +317,23 @@ if (introOverlay) {
   } else {
     sessionStorage.setItem("introShown", "1");
 
-    // Most browsers block audio autoplay before any user interaction --
-    // try to play, and if it's blocked, surface a manual "Play with sound"
-    // button instead of silently failing. The visual sequence runs either way.
+    // Most browsers block audio autoplay before any user interaction. Try
+    // immediately; if that's blocked, catch the very first interaction
+    // anywhere on the page (click, key, touch) and use it to start audio
+    // right then, so it plays as close to "automatically" as the browser
+    // allows without making the user find and click a specific button.
+    // The visual sequence runs on its own timer either way.
     if (introAudio) {
       introAudio.play().catch(() => {
-        introSoundBtn.classList.remove("hidden");
-      });
-      introSoundBtn.addEventListener("click", () => {
-        introAudio.play();
-        introSoundBtn.classList.add("hidden");
+        const playOnFirstInteraction = () => {
+          introAudio.play().catch(() => {});
+          document.removeEventListener("click", playOnFirstInteraction);
+          document.removeEventListener("keydown", playOnFirstInteraction);
+          document.removeEventListener("touchstart", playOnFirstInteraction);
+        };
+        document.addEventListener("click", playOnFirstInteraction);
+        document.addEventListener("keydown", playOnFirstInteraction);
+        document.addEventListener("touchstart", playOnFirstInteraction);
       });
     }
 
